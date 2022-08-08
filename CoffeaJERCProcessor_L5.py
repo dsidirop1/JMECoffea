@@ -53,12 +53,15 @@ class Processor(processor.ProcessorABC):
         
         ext = extractor()
         ext.add_weight_sets([
-            "* * Summer19UL18_V5_MC/Summer19UL18_V5_MC_L1FastJet_AK4PFchs.txt",
-            "* * Summer19UL18_V5_MC/Summer19UL18_V5_MC_L2Relative_AK4PFchs.txt"
+            "* * Summer20UL18_V2_MC/Summer20UL18_V2_MC_L1FastJet_AK4PFchs.txt",
+            "* * Summer20UL18_V2_MC/Summer20UL18_V2_MC_L2Relative_AK4PFchs.txt",
+            "* * Summer20UL18_V2_MC/Summer20UL18_V2_MC_L3Absolute_AK4PFchs.txt"
         ])
         ext.finalize()
 
-        jec_stack_names = ["Summer19UL18_V5_MC_L1FastJet_AK4PFchs", "Summer19UL18_V5_MC_L2Relative_AK4PFchs"]
+        jec_stack_names = ["Summer20UL18_V2_MC_L1FastJet_AK4PFchs",
+                           "Summer20UL18_V2_MC_L2Relative_AK4PFchs", 
+                           "Summer20UL18_V2_MC_L3Absolute_AK4PFchs"]
 
         evaluator = ext.make_evaluator()
         
@@ -73,8 +76,9 @@ class Processor(processor.ProcessorABC):
         # mc2016_ak8_jxform = JECStack(["more", "names", "of", "JEC parts"])
         
         self.corrector = FactorizedJetCorrector(
-            Summer19UL18_V5_MC_L1FastJet_AK4PFchs=evaluator['Summer19UL18_V5_MC_L1FastJet_AK4PFchs'],
-            Summer19UL18_V5_MC_L2Relative_AK4PFchs=evaluator['Summer19UL18_V5_MC_L2Relative_AK4PFchs'],
+            Summer20UL18_V2_MC_L1FastJet_AK4PFchs=evaluator['Summer20UL18_V2_MC_L1FastJet_AK4PFchs'],
+            Summer20UL18_V2_MC_L2Relative_AK4PFchs=evaluator['Summer20UL18_V2_MC_L2Relative_AK4PFchs'],
+            Summer20UL18_V2_MC_L3Absolute_AK4PFchs=evaluator['Summer20UL18_V2_MC_L3Absolute_AK4PFchs'],
         )
 
         self.name_map = jec_stack.blank_name_map
