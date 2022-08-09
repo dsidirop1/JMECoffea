@@ -27,14 +27,14 @@ def main():
     
     UsingDaskExecutor = True
     CoffeaCasaEnv     = False
-    load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = True     ### True if run only on one file
+    load_preexisting  = True    ### True if don't repeat the processing of files and use preexisting JER from output
+    test_run          = False     ### True if run only on one file
     
     tag = '_L5'
     
     exec('from CoffeaJERCProcessor'+tag+' import Processor') 
     
-    add_tag = '' # '_testing_19UL18' # ''
+    add_tag = '_QCD' # '_testing_19UL18' # ''
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -45,7 +45,7 @@ def main():
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
         
-    dataset = 'dataset.txt'
+    dataset = 'fileNames_QCD20UL18.txt'
     
     rootfiles = open(dataset).read().split()
     
@@ -130,41 +130,38 @@ def main():
         # output = util.load('out/CoffeaJERCOutputs_binned.coffea')
         output = util.load(outname)
         
-    print("Output:")
-    print(output)
     elapsed = time.time() - tstart
     
-    output
+    print("Output:")
+    print(output)
     
     def gauss(x, *p):
         A, mu, sigma = p
         return A*np.exp(-(x-mu)**2/(2.*sigma**2))
     
+    f_xvals = np.linspace(0,5,5001)
+    ptbins = output['ptresponse'].axis('pt').edges()
+    etabins = output['ptresponse'].axis('jeteta').edges()
+    jetpt_length = len(ptbins)
+    jeteta_length = len(etabins)
+    
     from pltStyle import pltStyle
     pltStyle(style='paper')
     plt.rcParams['figure.subplot.left'] = 0.160
     
-    output
-    
     import warnings
-    
-    f_xvals = np.linspace(0,5,5001)
     
     def fit_responses(output, samp='_b'):
         warnings.filterwarnings('ignore')
-        ptbins = output['ptresponse'].axis('pt').edges()
-        etabins = output['ptresponse'].axis('jeteta').edges()[:-1]
-        jetpt_length = len(ptbins)
-        jeteta_length = len(etabins)
     
         mean = np.zeros((jetpt_length, jeteta_length))
         median = np.zeros((jetpt_length, jeteta_length))
         width = np.zeros((jetpt_length, jeteta_length))
-        
+        chi2s = np.zeros((jetpt_length, jeteta_length))
+        meanvar = np.zeros((jetpt_length, jeteta_length))
         
         N_converge = 0
         N_not_converge = 0
-        chi2s = np.zeros((jetpt_length, jeteta_length))
     
         FitFigDir = 'fig/response_pt_eta'+samp+tag_full
         if not os.path.exists(FitFigDir):
@@ -207,13 +204,16 @@ def main():
                                 ### Second Gaussian
                     xfit_l = np.where(xvals>=p[1]-np.abs(p[2])*1.5)[0][0]
                     xfit_h = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0][0]
+                    if len(range(xfit_l,xfit_h))<4: #if there are only 3pnts, the uncertainty is infty
+                        xfit_l = xfit_l-1
+                        xfit_r = xfit_l+1
                     xvals2 = xvals[xfit_l: xfit_h]
                     yvals2 = yvals[xfit_l: xfit_h]
                     p2, arr = curve_fit(gauss, xvals2, yvals2, p0=p)
     
                     ygaus = gauss(xvals, *p2)
                     chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
-                    Ndof = len(xvals)-3
+                    Ndof = len(xvals2)-3
                     if chi2<50000:
                         pass
                         print("Fit converged, p = ", p2, ", chi2 = ", chi2 )
@@ -224,13 +224,13 @@ def main():
                     N_not_converge += 1
                     continue
     
-                fgaus = gauss(f_xvals, *p)
                 fgaus2 = gauss(f_xvals, *p2)
     
                 median[i,k] = np.median(histvals)
-                mean[i,k] = p[1] # - (scal-1)
-                width[i,k] = p[2]
+                mean[i,k] = p2[1] # - (scal-1)
+                width[i,k] = p2[2]
                 chi2s[i,k] = chi2
+                meanvar[i,k] = arr[1,1]
     
        ####################### Plotting ############################
                 if not test_run:
@@ -242,16 +242,16 @@ def main():
                     fig, ax2 = plt.subplots();
                     hist.plot1d(histo, ax=ax2, overlay='dataset', overflow='all',
                                 fill_opts={'alpha': .5, 'edgecolor': (0,0,0,0.3), 'linewidth': 1.4})
-                    ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
-                    ax2.plot(f_xvals, fgaus2, label='Gaus, 2nd fit',linewidth=1.8)
+                    # ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
+                    ax2.plot(f_xvals, fgaus2, label='Gaus',linewidth=1.8)
                     ax2.set_xlabel("Response ($E_{RECO}/E_{GEN}$)")
                     ax2.set_xlim(plot_pt_edges[[0,-1]])
-                    plt.text(1.4,0.75*h,'Mean {0:0.2f}'.format(p[1]))
-                    plt.text(1.4,0.68*h,'Median {0:0.2f}'.format(np.median(histvals)))
-                    plt.text(1.4,0.61*h,'Width {0:0.2f}'.format(p[2]))
-                    plt.text(1.3,0.53*h,'$\chi^2/ndof$ {0:0.1f}/{0:0.1f}'.format(chi2, Ndof))
-                    plt.text(1.3,0.46*h,'N data = {0:0.0f}'.format(N))
-                    ax2.legend(ncol=2);
+                    plt.text(0.03,0.95*h,'Mean {0:0.3f}$\pm${1:0.3f}'.format(p2[1],np.sqrt(arr[1,1])))
+                    plt.text(0.03,0.88*h,'Width {0:0.3f}$\pm${1:0.3f}'.format(p2[2],np.sqrt(arr[2,2])))
+                    plt.text(0.03,0.81*h,'Median {0:0.3f}'.format(np.median(histvals)))
+                    plt.text(0.03,0.73*h,'$\chi^2/ndof$ {0:0.2g}/{1:0.0f}'.format(chi2, Ndof))
+                    plt.text(0.03,0.66*h,'N data = {0:0.3g}'.format(N))
+                    ax2.legend();
     
                     plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.png');
                     plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.pdf');
@@ -261,229 +261,95 @@ def main():
         print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
         warnings.filterwarnings('default')
         
-    
+        return [mean, width, median, chi2s, meanvar]
         
     
-    subsamples = ['', '_b']
+    def plot_corrections(mean, samp, meanvar):
+        ### To ignore the points with 0 on y axis when setting the y axis limits
+        mean_p = mean.copy()
+        mean_p[mean_p==0] = np.nan
     
-    fit_responses(output, '')
+        # h = np.max(histo.values()[('QCD',)])
+        fig, ax = plt.subplots()
+        start = 17
+        
+        k4 = np.where(etabins<=-3)[0][-1]
+        k1 = np.where(etabins<=-2.5)[0][-1]
+        k5 = np.where(etabins<=-1.3)[0][-1]
+        k2 = np.where(etabins<=0)[0][-1]
+        k6 = np.where(etabins<=2.5)[0][-1]
+        k3 = np.where(etabins<=1.3)[0][-1]
+        k0 = np.where(etabins<=-5)[0][-1]
+        k7 = np.where(etabins<=3.0)[0][-1]
     
-    for sam in subsamples:
+        # ax.plot(ptbins[start:],mean_p[start:,k0], 'o', label=f'${etabins[k0]}<\eta<{etabins[k0+1]}$')
+        plt.errorbar(ptbins[start:],mean_p[start:,k1], yerr=np.sqrt(meanvar[start:,k1]), marker='o',
+                     linestyle="none", label=f'${etabins[k1]}<\eta<{etabins[k1+1]}$')
+        plt.errorbar(ptbins[start:],mean_p[start:,k3], yerr=np.sqrt(meanvar[start:,k3]), marker='o',
+                     linestyle="none", label=f'${etabins[k3]}<\eta<{etabins[k3+1]}$')
+        plt.errorbar(ptbins[start:],mean_p[start:,k5], yerr=np.sqrt(meanvar[start:,k5]), marker='o',
+                     linestyle="none", label=f'${etabins[k5]}<\eta<{etabins[k5+1]}$')
+        plt.errorbar(ptbins[start:],mean_p[start:,k2], yerr=np.sqrt(meanvar[start:,k2]), marker='o',
+                     linestyle="none", label=f'${etabins[k2]}<\eta<{etabins[k2+1]}$')
+        # ax.plot(ptbins[start:],mean_p[start:,k3], 'o', label=f'${etabins[k3]}<\eta<{etabins[k3+1]}$')
+    
+        ax.set_xlabel(r'$p_T$ (GeV)');
+        ax.set_ylabel(r'mean response');
+        ax.set_xscale('log')
+        # ax.set_ylim([0.8,1.1])
+        ax.legend()
+        if test_run:
+            plt.savefig('fig/corr_vs_pt'+samp+tag_full+'_test.pdf');
+            plt.savefig('fig/corr_vs_pt'+samp+tag_full+'_test.png');
+        else:
+            plt.savefig('fig/corr_vs_pt'+samp+tag_full+'.pdf');
+            plt.savefig('fig/corr_vs_pt'+samp+tag_full+'.png');
+    
+        plt.show();
+        
+    
+    def save_data(data, name, samp):
+        # data = {str(ptBin):mean[i] for i, ptBin in enumerate(output['jetpt'].axis('pt')[1:-1])}
+        data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins)}
+    
+        # data['etaBins'] = [str(etaBin) for etaBin in output['jeteta'].axis('jeteta')[1:-1]]
+        data_dict['etaBins'] = np.array([str(etaBin) for etaBin in etabins])
+    
+        df = pd.DataFrame(data=data_dict)
+        df = df.set_index('etaBins')
+        if not test_run:
+            df.to_csv('out_txt/EtaBinsvsPtBins'+name+samp+tag_full+'.csv')
+        else:
+            df.to_csv('out_txt/EtaBinsvsPtBins'+name+tag+'_test.csv')
+        return df
+    
+    def read_data(name, samp):
+        if not test_run:
+            df_csv = pd.read_csv('out_txt/EtaBinsvsPtBins'+name+samp+tag_full+'.csv').set_index('etaBins')
+        else:
+            df_csv = pd.read_csv('out_txt/EtaBinsvsPtBins'+name+tag+'_test.csv').set_index('etaBins')
+        
+        data = df_csv.to_numpy().transpose()
+        return data
+    
+    load_fit_res = False
+    subsamples = ['', '_b', '_c', '_l', '_g']
+    for samp in subsamples:
         print('-'*25)
         print('-'*25)
-        print('Fitting subsample: ', sam)
-        fit_responses(output, sam)
-    
-    samp = ''
-    
-    scalings = pd.read_csv('out_txt/EtaBinsvsPtBinsMean_L5_scale.csv').set_index('etaBins')
+        print('Fitting subsample: ', samp)
+        if load_fit_res:
+            mean = read_data("Mean", samp)
+            meanvar = read_data("MeanVar", samp)
+        else:
+            mean, width, median, chi2s, meanvar = fit_responses(output, samp)
+            for data, name in zip([mean, width, median, meanvar],["Mean", "Width", "Median", "MeanVar"]):
+                save_data(data, name, samp)
+                
+        plot_corrections(mean, samp, meanvar)
     
             
         
-        
-            
-       
-            
-    
-            
-            
-                
-                
-                
-    
-            
-            
-            
-            
-    
-                
-    
-            
-    
-    mean_p = mean.copy()
-    mean_p[mean_p==0] = np.nan
-    
-    fig, ax = plt.subplots()
-    start = 17
-    k0 = np.where(etabins<=-5)[0][-1]
-    k4 = np.where(etabins<=-3)[0][-1]
-    k1 = np.where(etabins<=-2.5)[0][-1]
-    k5 = np.where(etabins<=-1.3)[0][-1]
-    k2 = np.where(etabins<=0)[0][-1]
-    k3 = np.where(etabins<=1.3)[0][-1]
-    
-    ax.plot(ptbins[start:],mean_p[start:,k4], 'o', label=f'${etabins[k4]}<\eta<{etabins[k4+1]}$')
-    ax.plot(ptbins[start:],mean_p[start:,k1], 'o', label=f'${etabins[k1]}<\eta<{etabins[k1+1]}$')
-    ax.plot(ptbins[start:],mean_p[start:,k5], 'o', label=f'${etabins[k5]}<\eta<{etabins[k5+1]}$')
-    
-    ax.set_xlabel(r'$p_T$ (GeV)');
-    ax.set_ylabel(r'mean response');
-    ax.set_xscale('log')
-    ax.legend()
-    if test_run:
-        plt.savefig('fig/corr_vs_pt'+samp+tag_full+'_test.pdf');
-    else:
-        plt.savefig('fig/corr_vs_pt'+samp+tag_full+'.pdf');
-    
-    plt.show();
-    
-    mean_p = mean.copy()
-    mean_p[mean_p==0] = np.nan
-    
-    fig, ax = plt.subplots()
-    start = 17
-    k0 = np.where(etabins<=-5)[0][-1]
-    k4 = np.where(etabins<=-3)[0][-1]
-    k1 = np.where(etabins<=-2.5)[0][-1]
-    k5 = np.where(etabins<=-1.3)[0][-1]
-    k2 = np.where(etabins<=0)[0][-1]
-    k3 = np.where(etabins<=1.3)[0][-1]
-    
-    ax.plot(ptbins[start:],mean_p[start:,k1], 'o', label=f'${etabins[k1]}<\eta<{etabins[k1+1]}$')
-    ax.plot(ptbins[start:],mean_p[start:,k2], 'o', label=f'${etabins[k2]}<\eta<{etabins[k2+1]}$')
-    ax.plot(ptbins[start:],mean_p[start:,k3], 'o', label=f'${etabins[k3]}<\eta<{etabins[k3+1]}$')
-    
-    ax.set_xlabel(r'$p_T$ (GeV)');
-    ax.set_ylabel(r'mean response');
-    ax.set_xscale('log')
-    ax.legend()
-    if test_run:
-        plt.savefig('fig/corr_vs_pt'+samp+tag_full+'_test.pdf');
-    else:
-        plt.savefig('fig/corr_vs_pt'+samp+tag_full+'.pdf');
-    
-    plt.show();
-    
-    yvals
-    
-    np.max(yvals)
-    
-    np.where(yvals<np.median(yvals))
-    
-    rms = np.sqrt(np.sum((yvals-np.max(yvals))**2/len(yvals)))
-    
-    rms
-    
-    yvals
-    
-    np.mean(yvals)
-    
-    np.where(yvals<np.median(yvals)-rms)
-    
-    xfit_l
-    xfit_h 
-    
-    yvals
-    
-    histo = output['ptresponse'].integrate('jeteta', hist.Interval(-2.5, -1.3)).integrate('pt', hist.Interval(90, 120))
-    h = np.max(histo.values()[('QCD',)])
-    h = h if h!=0 else 0.05
-    xvals = output['ptresponse'+samp].axis('ptresponse').centers()
-    yvals = histo.values()[('QCD',)]
-    xvals = xvals[1:]
-    yvals = yvals[1:]
-    scal = scalings.loc[-2.5,str(300.0)]
-    p, arr = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
-    
-    fgaus = gauss(f_xvals, *p)
-    
-    histvals = np.repeat(histo.axis('ptresponse').centers(), np.array(histo.values()[('QCD',)],dtype='int'))
-    
-    median[i,k] = np.median(histvals)
-    mean[i,k] = p[1]-(scal-1)
-    width[i,k] = p[2]
-    idx.append(i)
-    
-    ygaus = gauss(xvals, *p)
-    chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
-    N = histo.integrate('ptresponse').values()[('QCD',)]
-    plot_response_axis = hist.Bin("jeteta", r"Jet $\eta$", hist_pt_edges)
-    histo = histo.rebin('ptresponse', plot_response_axis)
-    
-    p1 = p
-    
-    p
-    
-    plt.plot((yvals-ygaus)**2/(yvals+1E-9))
-    
-    np.sqrt(arr[1,1])
-    
-    all# %%capture
-    fig, ax2 = plt.subplots()
-    hist.plot1d(histo, ax=ax2, overlay='dataset', overflow='all',
-                fill_opts={'alpha': .5, 'edgecolor': (0,0,0,0.3), 'linewidth': 1.4})
-    ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
-    ax2.set_xlim(plot_pt_edges[[0,-1]])
-    plt.text(1.4,0.75*h,'Mean {0:0.3f}'.format(p[1]))
-    plt.text(1.4,0.68*h,'Median {0:0.3f}'.format(np.median(histvals)))
-    plt.text(1.4,0.61*h,'Width {0:0.3f}'.format(p[2]))
-    plt.text(1.3,0.53*h,'$\chi^2/ndof$ {0:0.1f}/97'.format(chi2))
-    plt.text(1.3,0.46*h,'N data = {0:0.0f}'.format(N))
-    ax2.legend(ncol=2);
-    
-    plt.show();
-    plt.close();
-    
-    all# %%capture
-    fig, ax2 = plt.subplots()
-    hist.plot1d(histo, ax=ax2, overlay='dataset', overflow='all',
-                fill_opts={'alpha': .5, 'edgecolor': (0,0,0,0.3), 'linewidth': 1.4})
-    ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
-    ax2.set_xlim(plot_pt_edges[[0,-1]])
-    plt.text(1.4,0.75*h,'Mean {0:0.2f}'.format(p[1]))
-    plt.text(1.4,0.68*h,'Median {0:0.2f}'.format(np.median(histvals)))
-    plt.text(1.4,0.61*h,'Width {0:0.2f}'.format(p[2]))
-    plt.text(1.3,0.53*h,'$\chi^2/ndof$ {0:0.1f}/97'.format(chi2))
-    plt.text(1.3,0.46*h,'N data = {0:0.0f}'.format(N))
-    ax2.legend();
-    
-    plt.show();
-    plt.close();
-    
-    data = {str(ptBin):mean[i] for i, ptBin in enumerate(ptbins)}
-    
-    data['etaBins'] = np.array([str(etaBin) for etaBin in etabins])
-    
-    df = pd.DataFrame(data=data)
-    df = df.set_index('etaBins')
-    if not test_run:
-        df.to_csv('out_txt/EtaBinsvsPtBinsMean'+samp+tag_full+'.csv')
-    else:
-        df.to_csv('out_txt/EtaBinsvsPtBinsMean'+tag+'_test.csv')
-    
-    data_width = {str(ptBin):width[i] for i, ptBin in enumerate(ptbins)}
-    
-    data_width['etaBins'] = [str(etaBin) for etaBin in etabins]
-    
-    df_width = pd.DataFrame(data=data_width)
-    df_width = df_width.set_index('etaBins')
-    if not test_run:
-        df_width.to_csv('out_txt/EtaBinsvsPtBinsWidth'+samp+tag_full+'.csv')
-    else:
-        df_width.to_csv('out_txt/EtaBinsvsPtBinsWidth'+tag+'_test.csv')
-    
-    len(data['etaBins'])
-    len(mean[0])
-    
-    data_median = {str(ptBin):median[i] for i, ptBin in enumerate(ptbins)}
-    
-    data_median['etaBins'] = [str(etaBin) for etaBin in etabins]
-    
-    df_median = pd.DataFrame(data=data_median)
-    df_median = df_median.set_index('etaBins')
-    if not test_run:
-        df_median.to_csv('out_txt/EtaBinsvsPtBinsMedian'+samp+tag_full+'.csv')
-    else:
-        df_median.to_csv('out_txt/EtaBinsvsPtBinsMedian'+tag+'_test.csv')
-    
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-        print(df)
-        
-    
-    df_csv = pd.read_csv('out_txt/EtaBinsvsPtBinsMean_L5.csv').set_index('etaBins')
-    
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-        print(df_csv)
     
 if __name__ == "__main__":
     main()
