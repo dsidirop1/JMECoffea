@@ -34,7 +34,7 @@ def main():
     
     exec('from CoffeaJERCProcessor'+tag+' import Processor') 
     
-    add_tag = '_QCD' # '_testing_19UL18' # ''
+    add_tag = '_QCD' # '_QCD' # '_testing_19UL18' # ''
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -45,7 +45,7 @@ def main():
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
         
-    dataset = 'fileNames_QCD20UL18.txt'
+    dataset = 'fileNames_QCD20UL18.txt' # 'dataset.txt'  #
     
     rootfiles = open(dataset).read().split()
     
@@ -142,8 +142,10 @@ def main():
     f_xvals = np.linspace(0,5,5001)
     ptbins = output['ptresponse'].axis('pt').edges()
     etabins = output['ptresponse'].axis('jeteta').edges()
-    jetpt_length = len(ptbins)
-    jeteta_length = len(etabins)
+    jetpt_length = len(ptbins)-1
+    jeteta_length = (len(etabins)-1)//2
+    
+    etabins_mod = etabins[(len(etabins)-1)//2:]
     
     from pltStyle import pltStyle
     pltStyle(style='paper')
@@ -185,15 +187,17 @@ def main():
                 pt_string = '_pT'+str(ptBin.lo) + 'to' + str(ptBin.hi)
                 pt_string = pt_string.replace('.0','').replace('-infto','0to')
     
-            for k in range(len(etabins)-1):
-    
-                etaBin = hist.Interval(etabins[k], etabins[k+1])
-                print("etaBin = ", etaBin ,", ptBin = ", ptBin )
-                eta_string = '_eta'+str(etaBin.lo)+'to'+str(etaBin.hi)
+            for k in range(jeteta_length):
+                etaBinPl = hist.Interval(etabins[k+jeteta_length], etabins[k+1+jeteta_length])
+                etaBinMi = hist.Interval(etabins[jeteta_length-k-1], etabins[jeteta_length-k])
+                print("etaBin = ", etaBinPl ,", ptBin = ", ptBin )
+                eta_string = '_eta'+str(etaBinPl.lo)+'to'+str(etaBinPl.hi)
                 eta_string = eta_string.replace('.','')
                 
                 # The name integrate is a bit misleasding in this line. Is there another way to "slice" a histogram? //Andris
-                histo = output['ptresponse'+samp].integrate('jeteta', etaBin).integrate('pt', ptBin) 
+                histoMi = output['ptresponse'+samp].integrate('jeteta', etaBinMi).integrate('pt', ptBin)
+                histoPl = output['ptresponse'+samp].integrate('jeteta', etaBinPl).integrate('pt', ptBin)
+                histo = (histoMi+histoPl)
                 histvals = np.repeat(histo.axis('ptresponse').centers(), np.array(histo.values()[('QCD',)],dtype='int'))
                 yvals = histo.values()[('QCD',)][1:]  #[1:] to exclude the second peak for low pt
     
@@ -206,7 +210,10 @@ def main():
                     xfit_h = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0][0]
                     if len(range(xfit_l,xfit_h))<4: #if there are only 3pnts, the uncertainty is infty
                         xfit_l = xfit_l-1
-                        xfit_r = xfit_l+1
+                        xfit_h = xfit_h+1
+                        if len(range(xfit_l,xfit_h))<4:
+                            xfit_l = xfit_l-1
+                            xfit_h = xfit_h+1
                     xvals2 = xvals[xfit_l: xfit_h]
                     yvals2 = yvals[xfit_l: xfit_h]
                     p2, arr = curve_fit(gauss, xvals2, yvals2, p0=p)
@@ -237,8 +244,8 @@ def main():
                     N = histo.integrate('ptresponse').values()[('QCD',)]
                     histo = histo.rebin('ptresponse', plot_response_axis)
     
-                    h = np.max(histo.values()[('QCD',)]);
-                    h = h if h!=0 else 0.05
+#                     h = np.max(yvals[:-1]);
+#                     h = h if h!=0 else 0.05
                     fig, ax2 = plt.subplots();
                     hist.plot1d(histo, ax=ax2, overlay='dataset', overflow='all',
                                 fill_opts={'alpha': .5, 'edgecolor': (0,0,0,0.3), 'linewidth': 1.4})
@@ -246,6 +253,7 @@ def main():
                     ax2.plot(f_xvals, fgaus2, label='Gaus',linewidth=1.8)
                     ax2.set_xlabel("Response ($E_{RECO}/E_{GEN}$)")
                     ax2.set_xlim(plot_pt_edges[[0,-1]])
+                    h = ax2.get_ylim()[1]/1.05
                     plt.text(0.03,0.95*h,'Mean {0:0.3f}$\pm${1:0.3f}'.format(p2[1],np.sqrt(arr[1,1])))
                     plt.text(0.03,0.88*h,'Width {0:0.3f}$\pm${1:0.3f}'.format(p2[2],np.sqrt(arr[2,2])))
                     plt.text(0.03,0.81*h,'Median {0:0.3f}'.format(np.median(histvals)))
@@ -264,6 +272,8 @@ def main():
         return [mean, width, median, chi2s, meanvar]
         
     
+    etabins_mod
+    
     def plot_corrections(mean, samp, meanvar):
         ### To ignore the points with 0 on y axis when setting the y axis limits
         mean_p = mean.copy()
@@ -273,33 +283,37 @@ def main():
         fig, ax = plt.subplots()
         start = 17
         
-        k4 = np.where(etabins<=-3)[0][-1]
-        k1 = np.where(etabins<=-2.5)[0][-1]
-        k5 = np.where(etabins<=-1.3)[0][-1]
-        k2 = np.where(etabins<=0)[0][-1]
-        k6 = np.where(etabins<=2.5)[0][-1]
-        k3 = np.where(etabins<=1.3)[0][-1]
-        k0 = np.where(etabins<=-5)[0][-1]
-        k7 = np.where(etabins<=3.0)[0][-1]
+        
+        k2 = np.where(etabins_mod<=0)[0][-1]
+        k4 = np.where(etabins_mod<=1.3)[0][-1]
+        k6 = np.where(etabins_mod<=2.5)[0][-1]
+        k8 = np.where(etabins_mod<=3.0)[0][-1]
     
+        
         # ax.plot(ptbins[start:],mean_p[start:,k0], 'o', label=f'${etabins[k0]}<\eta<{etabins[k0+1]}$')
-        plt.errorbar(ptbins[start:],mean_p[start:,k1], yerr=np.sqrt(meanvar[start:,k1]), marker='o',
-                     linestyle="none", label=f'${etabins[k1]}<\eta<{etabins[k1+1]}$')
-        plt.errorbar(ptbins[start:],mean_p[start:,k3], yerr=np.sqrt(meanvar[start:,k3]), marker='o',
-                     linestyle="none", label=f'${etabins[k3]}<\eta<{etabins[k3+1]}$')
-        plt.errorbar(ptbins[start:],mean_p[start:,k5], yerr=np.sqrt(meanvar[start:,k5]), marker='o',
-                     linestyle="none", label=f'${etabins[k5]}<\eta<{etabins[k5+1]}$')
-        plt.errorbar(ptbins[start:],mean_p[start:,k2], yerr=np.sqrt(meanvar[start:,k2]), marker='o',
-                     linestyle="none", label=f'${etabins[k2]}<\eta<{etabins[k2+1]}$')
+        plt.errorbar(ptbins[start:-1],mean_p[start:,k2], yerr=np.sqrt(meanvar[start:,k2]), marker='o',
+                     linestyle="none", label=f'${etabins_mod[k2]}<\eta<{etabins_mod[k2+1]}$')
+        plt.errorbar(ptbins[start:-1],mean_p[start:,k4], yerr=np.sqrt(meanvar[start:,k4]), marker='o',
+                 linestyle="none", label=f'${etabins_mod[k4]}<\eta<{etabins_mod[k4+1]}$')
+        plt.errorbar(ptbins[start:-1],mean_p[start:,k6], yerr=np.sqrt(meanvar[start:,k6]), marker='o',
+                 linestyle="none", label=f'${etabins_mod[k6]}<\eta<{etabins_mod[k6+1]}$')
+        plt.errorbar(ptbins[start:-1],mean_p[start:,k8], yerr=np.sqrt(meanvar[start:,k8]), marker='o',
+                 linestyle="none", label=f'${etabins_mod[k8]}<\eta<{etabins_mod[k8+1]}$')
         # ax.plot(ptbins[start:],mean_p[start:,k3], 'o', label=f'${etabins[k3]}<\eta<{etabins[k3+1]}$')
     
+        ### Calculate resonable limits excluding the few points with insane errors
+        yerr_norm = np.concatenate([np.sqrt(meanvar[start:,[k2, k4, k6, k8]]) ])
+        y_norm = np.concatenate([mean_p[start:,[k2, k4, k6, k8]]])
+        norm_pos = (yerr_norm<0.02) &  (yerr_norm != np.inf) & (y_norm>-0.1)
+        ax.set_ylim(np.min((y_norm-yerr_norm)[norm_pos]) ,np.max((yerr_norm+y_norm)[norm_pos]))
+        
         ax.set_xlabel(r'$p_T$ (GeV)');
         ax.set_ylabel(r'mean response');
         ax.set_xscale('log')
         # ax.set_ylim([0.8,1.1])
         ax.legend()
         if test_run:
-            plt.savefig('fig/corr_vs_pt'+samp+tag_full+'_test.pdf');
+            plt.savefig('fig//corr_vs_pt'+samp+tag_full+'_test.pdf');
             plt.savefig('fig/corr_vs_pt'+samp+tag_full+'_test.png');
         else:
             plt.savefig('fig/corr_vs_pt'+samp+tag_full+'.pdf');
@@ -310,10 +324,10 @@ def main():
     
     def save_data(data, name, samp):
         # data = {str(ptBin):mean[i] for i, ptBin in enumerate(output['jetpt'].axis('pt')[1:-1])}
-        data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins)}
+        data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins[:-1])}
     
         # data['etaBins'] = [str(etaBin) for etaBin in output['jeteta'].axis('jeteta')[1:-1]]
-        data_dict['etaBins'] = np.array([str(etaBin) for etaBin in etabins])
+        data_dict['etaBins'] = np.array([str(etaBin) for etaBin in etabins_mod[:-1]])
     
         df = pd.DataFrame(data=data_dict)
         df = df.set_index('etaBins')
@@ -321,7 +335,6 @@ def main():
             df.to_csv('out_txt/EtaBinsvsPtBins'+name+samp+tag_full+'.csv')
         else:
             df.to_csv('out_txt/EtaBinsvsPtBins'+name+tag+'_test.csv')
-        return df
     
     def read_data(name, samp):
         if not test_run:
@@ -334,6 +347,7 @@ def main():
     
     load_fit_res = False
     subsamples = ['', '_b', '_c', '_l', '_g']
+#     subsamples = ['']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
@@ -348,8 +362,6 @@ def main():
                 
         plot_corrections(mean, samp, meanvar)
     
-            
-        
     
 if __name__ == "__main__":
     main()
