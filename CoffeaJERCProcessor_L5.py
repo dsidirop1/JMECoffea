@@ -94,6 +94,10 @@ class Processor(processor.ProcessorABC):
         
         self.jet_factory = CorrectedJetsFactory(self.name_map, jec_stack)
 
+        df_csv = pd.read_csv('out_txt/Closure_L5_QCD.csv').set_index('etaBins')
+        self.closure_corr = df_csv.to_numpy().transpose()
+        self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
+        
         print(dir(evaluator))
         print()
 
@@ -155,16 +159,37 @@ class Processor(processor.ProcessorABC):
         matched_genjeteta = matchedJets.slot0.eta
         
         
-        ptresponse = jetpt / matched_genjetpt
-
+        matched_genjetpt_np  = ak.flatten(matched_genjetpt).to_numpy( allow_missing=True)
+        matched_genjeteta_np = ak.flatten(matched_genjeteta).to_numpy( allow_missing=True)
+        jetpt_np             = ak.flatten(jetpt).to_numpy( allow_missing=True)
+        jeteta_np            = ak.flatten(jeteta).to_numpy( allow_missing=True)
+        
+        etabins_mod = etabins[(len(etabins)-1)//2:]
+        ptresponse_np = jetpt_np / matched_genjetpt_np
+        correction_pos_pt = len(ptbins) - np.count_nonzero(np.array(matched_genjetpt_np, ndmin=2).transpose() < ptbins, axis=1)
+        correction_pos_eta = len(etabins_mod) - np.count_nonzero(np.abs(np.array(matched_genjeteta_np, ndmin=2).transpose()) < etabins_mod, axis=1)
+        
+#         print("matched_genjetpt = ", matched_genjetpt)
+#         print("matched_genjetpt np = ", matched_genjetpt_np)
+        
+#         ptresponse_np = jetpt_np / matched_genjetpt_np
+        ptresponse_np = jetpt_np / matched_genjetpt_np / self.closure_corr[correction_pos_pt, correction_pos_eta]
+#         ptresponse = jetpt / matched_genjetpt 
+        
+#         print("corr pos = ", [correction_pos_pt[:10], correction_pos_eta[:10]])
+#         print("closure = ", self.closure_corr[correction_pos_pt[:10], correction_pos_eta[:10]])
+#         print("ptresp = ", ptresponse)
+#         print("ptresp_np = ", ptresponse_np)
+        
+        
         subsamples = ['b', 'c', 'l', 'g']
         masks = {}
-        masks['b'] = (matchedJets.slot0.partonFlavour==5) | (matchedJets.slot0.partonFlavour==-5)
-        masks['c'] = (matchedJets.slot0.partonFlavour==4) | (matchedJets.slot0.partonFlavour==-4)
-        masks['l'] = ((matchedJets.slot0.partonFlavour==1) | (matchedJets.slot0.partonFlavour==-1) |
+        masks['b'] = ak.flatten((matchedJets.slot0.partonFlavour==5) | (matchedJets.slot0.partonFlavour==-5)).to_numpy( allow_missing=True)
+        masks['c'] = ak.flatten((matchedJets.slot0.partonFlavour==4) | (matchedJets.slot0.partonFlavour==-4)).to_numpy( allow_missing=True)
+        masks['l'] = ak.flatten(((matchedJets.slot0.partonFlavour==1) | (matchedJets.slot0.partonFlavour==-1) |
                      (matchedJets.slot0.partonFlavour==2) | (matchedJets.slot0.partonFlavour==-2) |
-                    (matchedJets.slot0.partonFlavour==3) | (matchedJets.slot0.partonFlavour==-3) )
-        masks['g'] = (matchedJets.slot0.partonFlavour==21)
+                    (matchedJets.slot0.partonFlavour==3) | (matchedJets.slot0.partonFlavour==-3) )).to_numpy( allow_missing=True)
+        masks['g'] = ak.flatten((matchedJets.slot0.partonFlavour==21)).to_numpy( allow_missing=True)
 
         # b_pos = (matchedJets.slot0.partonFlavour==5) | (matchedJets.slot0.partonFlavour==-5)
         # c_pos = (matchedJets.slot0.partonFlavour==4) | (matchedJets.slot0.partonFlavour==-4)
@@ -174,9 +199,9 @@ class Processor(processor.ProcessorABC):
         # g_pos = matchedJets.slot0.partonFlavour==21
 
 
-        ptresponses            = { sample: ptresponse[masks[sample]]             for sample in subsamples }
-        matched_genjetpts      = { sample: matched_genjetpt[masks[sample]]       for sample in subsamples }
-        matched_genjetetas     = { sample: matched_genjeteta[masks[sample]]      for sample in subsamples }
+        ptresponses            = { sample: ptresponse_np[masks[sample]]             for sample in subsamples }
+        matched_genjetpts      = { sample: matched_genjetpt_np[masks[sample]]       for sample in subsamples }
+        matched_genjetetas     = { sample: matched_genjeteta_np[masks[sample]]      for sample in subsamples }
 
         # for sample in sumsamples:
             # ptresponses
@@ -195,14 +220,23 @@ class Processor(processor.ProcessorABC):
                         jeteta = ak.to_numpy(ak.flatten(jeteta), allow_missing=True))
        
 
-        output['ptresponse'].fill(dataset=dataset, pt=ak.to_numpy(ak.flatten(matched_genjetpt), allow_missing=True),
-                        jeteta=ak.to_numpy(ak.flatten(matched_genjeteta), allow_missing=True),
-                        ptresponse=ak.to_numpy(ak.flatten(ptresponse), allow_missing=True))
-        # subsamples = ['b', 'c', 'l', 'g']
+ #         output['ptresponse'].fill(dataset=dataset, pt=ak.to_numpy(ak.flatten(matched_genjetpt), allow_missing=True),
+ #                             jeteta=ak.to_numpy(ak.flatten(matched_genjeteta), allow_missing=True),
+ #                             ptresponse=ak.to_numpy(ak.flatten(ptresponse), allow_missing=True))
+        
+        output['ptresponse'].fill(dataset=dataset, pt=matched_genjetpt_np,
+                                                   jeteta=matched_genjeteta_np,
+                                                   ptresponse=ptresponse_np)
+  
         for sample in subsamples:
-               output['ptresponse_'+sample].fill(dataset=dataset, pt=ak.to_numpy(ak.flatten(matched_genjetpts[sample]), allow_missing=True),
-                        jeteta=ak.to_numpy(ak.flatten(matched_genjetetas[sample]), allow_missing=True),
-                        ptresponse=ak.to_numpy(ak.flatten(ptresponses[sample] ), allow_missing=True))
+               output['ptresponse_'+sample].fill(dataset=dataset, pt=matched_genjetpts[sample],
+                                    jeteta=matched_genjetetas[sample],
+                                    ptresponse=ptresponses[sample])
+
+#         for sample in subsamples:
+#                output['ptresponse_'+sample].fill(dataset=dataset, pt=ak.to_numpy(ak.flatten(matched_genjetpts[sample]), allow_missing=True),
+#                         jeteta=ak.to_numpy(ak.flatten(matched_genjetetas[sample]), allow_missing=True),
+#                         ptresponse=ak.to_numpy(ak.flatten(ptresponses[sample] ), allow_missing=True))
         
         return output
 
