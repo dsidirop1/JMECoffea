@@ -27,7 +27,7 @@ def main():
     
     UsingDaskExecutor = True
     CoffeaCasaEnv     = False
-    load_preexisting  = True    ### True if don't repeat the processing of files and use preexisting JER from output
+    load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False     ### True if run only on one file
     
     tag = '_L5'
