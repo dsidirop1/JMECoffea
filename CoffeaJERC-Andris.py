@@ -23,7 +23,7 @@ def main():
     from pltStyle import pltStyle
     import os
     
-    from CoffeaJERCProcessor_L5 import Processor
+    from CoffeaJERCProcessor_L5_Herwig import Processor
     
     UsingDaskExecutor = True
     CoffeaCasaEnv     = False
@@ -33,9 +33,9 @@ def main():
     
     tag = '_L5'
     
-    exec('from CoffeaJERCProcessor'+tag+' import Processor') 
+    exec('from CoffeaJERCProcessor'+tag+'_Herwig import Processor') 
     
-    add_tag = '_TTBAR' #'_Herwig-TTBAR' # '_testing_19UL18' # ''
+    add_tag = '_TTBAR-hadflav-0-50' # '_TTBAR' #'_Herwig-TTBAR' # '_testing_19UL18' # ''
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -68,7 +68,7 @@ def main():
     
     fileslist = [xrootdstr + file for file in rootfiles] #[:10] # :20 to skim the events
     
-    fileslist = fileslist
+    fileslist = fileslist[:50]
     if test_run:
         fileslist = [fileslist[0]]
         ### The smallest file in the RunIISummer20UL18NanoAODv9 dataset
@@ -98,7 +98,7 @@ def main():
         
         from dask.distributed import Client
         client = Client()
-        client.upload_file('CoffeaJERCProcessor'+tag+'.py')
+        client.upload_file('CoffeaJERCProcessor'+tag+'_Herwig.py')
     
     tstart = time.time()
     
@@ -378,6 +378,7 @@ def main():
         return data
     
     subsamples = ['', '_b', '_c', '_l', '_g']
+    subsamples = ['', '_b', '_c']
 #     subsamples = [''] #, '_b']
     for samp in subsamples:
         print('-'*25)
@@ -580,7 +581,7 @@ def main():
     plt.show();
     'a';
     
-    subsamples = ['', '_b', '_c', '_l', '_g']
+    subsamples = ['', '_b', '_c'] #, '_l', '_g']
     
     for samp in subsamples:
         for etabin in range(4):

@@ -36,7 +36,7 @@ class Processor(processor.ProcessorABC):
         cats_axis = hist.Cat("anacat", "Analysis Category")
        
         jetpt_axis = hist.Bin("pt", r"$p_T$", ptbins)
-        ptresponse_axis = hist.Bin("ptresponse", "RECO / GEN response", 100, 0, 5)
+        ptresponse_axis = hist.Bin("ptresponse", "RECO / GEN response", 100, 0, 2.5)
         jetmass_axis = hist.Bin("jetmass", r"Jet $m$ [GeV]", 50, 0, 500)
         jeteta_axis = hist.Bin("jeteta", r"Jet $\eta$", etabins)
         jetphi_axis = hist.Bin("jetphi", r"Jet $\phi$", 50, -np.pi, np.pi)
@@ -97,6 +97,9 @@ class Processor(processor.ProcessorABC):
         df_csv = pd.read_csv('out_txt/Closure_L5_QCD.csv').set_index('etaBins')
         self.closure_corr = df_csv.to_numpy().transpose()
         self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
+        
+#         ### Uncomment to make a correction for closure
+#         self.closure_corr = np.ones(self.closure_corr.shape)
         
         print(dir(evaluator))
         print()
