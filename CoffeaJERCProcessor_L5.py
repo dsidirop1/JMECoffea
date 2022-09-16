@@ -20,10 +20,23 @@ import awkward as ak
 
 manual_bins = [400, 500, 600, 800, 1000, 1500, 2000, 3000, 7000, 10000]
 
-ptbins = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 20, 23, 27, 30, 35, 40, 45, 57, 72, 90, 120, 
+# ptbins = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 20, 23, 27, 30, 35, 40, 45, 57, 72, 90, 120, 
+        # 150, 200, 300, 400, 550, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000 ])
+ptbins = np.array([15, 17, 20, 23, 27, 30, 35, 40, 45, 57, 72, 90, 120, 
         150, 200, 300, 400, 550, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000 ])
 
-etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
+etabins = np.array([-5.191, -4.889, -4.716, -4.538, -4.363, -4.191, -4.013, -3.839, -3.664, -3.489,
+                        -3.314, -3.139, -2.964, -2.853,  -2.65,   -2.5, -2.322, -2.172, -2.043,  -1.93, 
+                        -1.83,  -1.74, -1.653, -1.566, -1.479, -1.392, -1.305, -1.218, -1.131, -1.044,
+                        -0.957, -0.879, -0.783, -0.696, -0.609, -0.522, -0.435, -0.348, -0.261, -0.174,
+                        -0.087,  0,  0.087,  0.174,  0.261,  0.348,  0.435,  0.522,  0.609,  0.696, 
+                        0.783,  0.879,  0.957,  1.044,  1.131,  1.218,  1.305,  1.392,  1.479,  1.566, 
+                        1.653,   1.74,   1.83,   1.93,  2.043,  2.172,  2.322,    2.5,   2.65,  2.853,
+                        2.964,  3.139,  3.314,  3.489,  3.664,  3.839,  4.013,  4.191,  4.363,  4.538,
+                        4.716,  4.889, 5.191])
+
+
+# etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
 
 
 """@TTbarResAnaHadronic Package to perform the data-driven mistag-rate-based ttbar hadronic analysis. 
@@ -70,8 +83,8 @@ class Processor(processor.ProcessorABC):
 
         evaluator = ext.make_evaluator()
         
-        print(evaluator)
-        print(evaluator.keys())
+        print("evaluator = ", evaluator)
+        print("evaluator keys = ", evaluator.keys())
         
         jec_inputs = {name: evaluator[name] for name in jec_stack_names}
         jec_stack = JECStack(jec_inputs)
@@ -117,7 +130,7 @@ class Processor(processor.ProcessorABC):
     def process(self, events):
         
         output = self.accumulator.identity()
-        
+
         dataset = events.metadata['dataset']
     
         # Event Cuts
@@ -130,37 +143,119 @@ class Processor(processor.ProcessorABC):
 
         # get GenJets and Jets
         jets = selectedEvents.Jet
-#         gen_jets = jets.matched_gen #[:,0:2]
         
-#         print("N jets before cuts tot = ", ak.sum(ak.num(jets)))
+        lhe_part_exists = False
+#         try:
+#                 events.LHEPart
+#                 lhe_part_exists = True
+#         except(AttributeError):
+#                 print("LHEPart doesn't exist")
+#         except:
+#                 print("Error at LHE Part")
+
+        ########### LHE Flavour2 derivation ###########
+        ''' Algorithm of LHE_Flavour2:
+        Cuts all the outgoing LHE particles that have pdgId as quarks (except top) and gluons.
+        For each LHE particle finds the closest jet and gives the jet its flavour.
+        If a jet is marked by different LHE particles:
+         - if it is marked by 2 LHE particles give the jet a code = (flav1)*100+flav2
+         - if it is marked by 3 or more LHE particles, give it a code = 100.
+        '''
+#         lhe_part_exists = True 
+        if lhe_part_exists:
+                LHE_flavour_2 = ak.zeros_like(jets.hadronFlavour)
+                jet_shape2 = ak.num(jets.hadronFlavour)
+
+                LHE_flavour_np_2 = ak.flatten(LHE_flavour_2).to_numpy().copy()
+
+                LHEPart = events.LHEPart
+                absLHEid = np.abs(LHEPart.pdgId)
+                LHE_outgoing = LHEPart[(LHEPart.status==1) & ((absLHEid < 6) | (absLHEid == 21))]
+
+                drs, [LHE_match, _] = LHE_outgoing.metric_table(jets, return_combinations=True, axis=1)
+
+                # arms_dim = ak.argmin(drs, axis=2, keepdims=True )
+                arms = ak.argmin(drs, axis=2)
+                # aa = ak.flatten(arms_dim,axis=2)
+                cums = np.cumsum(jet_shape2)[:-1]
+                cums = np.append(0,cums)
+                arms_flat = arms + cums
+                arms_np = ak.flatten(arms_flat).to_numpy().data
+                # print("arms_np = ", arms_np)
+                LHE_match_flat = ak.flatten(LHE_match[:,:,:1].pdgId,axis=1)
+                LHE_flavour_np_2[arms_np[ak.num(LHE_match_flat)>0]] = ak.flatten(LHE_match_flat)
+
+
+                flavlen = len(LHE_flavour_np_2)
+
+                # LHE_flavour_np_2
+
+                for jetii in range(max(jet_shape2)):
+                        clashing_ev = np.count_nonzero(jetii == arms, axis=1)
+                        #     if jetii ==1:
+                        #         print("cl ev = ", clashing_ev)
+                        clash_loc = cums[(clashing_ev>2)]+jetii
+                        # print("Checking ii = ", jetii, ", found closing locs = ", clash_loc)
+#                         if np.any(clash_loc>flavlen):
+#                                 loc = np.where(clash_loc>flavlen)
+#                                 clash_loc = clash_loc[:loc[0][0]]
+                        #         print("Changed to ", clash_loc)
+                        LHE_flavour_np_2[clash_loc] = 100
+                        
+                        clash_loc = cums[(clashing_ev==2 )]+jetii
+                        #     print("Checking ii = ", jetii, ", found closing locs = ", clash_loc)
+                        
+                        for ii in clash_loc:
+                                a = np.where(arms_np == ii)
+                                # print("a = ", a)
+                                aa = LHE_match_flat[a]
+                                # print("aa = ", aa)
+                                indx = aa[0]*100+aa[1]
+
+                        LHE_flavour_np_2[clash_loc] = indx
+
+#                 print("LHEFlavour = ", LHE_flavour_np_2.tolist())
+                jets["LHE_Flavour2"] = ak.unflatten(LHE_flavour_np_2, jet_shape2)
+
         ############ Jet selection ###########
         # Cut if no matching gen jet found
         jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
-        # At least one matched (dresseds) electron/muon found
+        # At least one matched (dressed) electron/muon found
         dressed_electron_mask = ak.sum(ak.is_none(jets.matched_electrons,axis=2), axis=2)==2
         dressed_muon_mask     = ak.sum(ak.is_none(jets.matched_muons,axis=2), axis=2)==2
-        # pt mask applied after the corrections
-        jet_mask = jet_gen_match_mask & dressed_electron_mask & dressed_muon_mask  #& jet_pt_mask
+        jet_mask = jet_gen_match_mask & dressed_electron_mask & dressed_muon_mask # & jet_pt_mask
         
         selected_jets = jets[jet_mask]
         
-        # Cut on overlapping jets
-        drs, _ = selected_jets.metric_table(selected_jets, return_combinations=True, axis=1)
-        jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
 
+        jet_pt_mask = selected_jets.matched_gen.pt>20
+        ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
+        ## otherwise after the correction .matched_gen field is not found.
+        jet_pt_mask_shape = ak.num(jet_pt_mask)
+        jet_pt_mask_np = ak.flatten(jet_pt_mask).to_numpy()
+        jet_pt_mask = ak.unflatten(jet_pt_mask_np.data, jet_pt_mask_shape)
+        sel_jets = selected_jets[jet_pt_mask]
+
+                # Cut on overlapping jets
+        drs, _ = sel_jets.metric_table(sel_jets, return_combinations=True, axis=1)
+        jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
+        sel_jets = sel_jets[jet_iso_mask]
+
+        # print("jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_mask")
         
-#         print("N jets before iso cut = ", ak.sum(ak.num(jets)))
-        sel_jets = selected_jets[jet_iso_mask]
-        
-#         print("jet_pt_mask/ jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_iso_mask/ jet_mask")
-#         print(ak.sum(jet_pt_mask))
-#         print(ak.sum(jet_gen_match_mask))
-#         print(ak.sum(dressed_electron_mask))
-#         print(ak.sum(dressed_muon_mask))
-#         print(ak.sum(jet_iso_mask))
-#         print(ak.sum(jet_mask)    )
-#         print("N jets tot = ", ak.sum(ak.num(jets)))
-#         print("By ev = ", ak.num(jets)[:20])
+        # print(ak.sum(jet_gen_match_mask))
+        # print(ak.sum(dressed_electron_mask))
+        # print(ak.sum(dressed_muon_mask))
+        # print(ak.sum(jet_mask)    )
+        # print("N jets before cuts tot = ", ak.sum(ak.num(jets)))
+        # print("By ev = ", ak.num(jets)[:20])
+        # print("N jets after first cuts = ", ak.sum(ak.num(selected_jets)))
+        # print("By ev = ", ak.num(jets)[:20])
+        # print("jet_pt_mask = ", ak.sum(jet_pt_mask))
+        # print("jet_iso_mask = ", ak.sum(jet_iso_mask))
+
+        # print("N jets after sel = ", ak.sum(ak.num(sel_jets)))
+        # print("By ev after sel = ", ak.num(sel_jets))
 
         ############ Apply Jet energy corrections on the jets ###########
         # define variables needed for corrected jets
@@ -173,8 +268,61 @@ class Processor(processor.ProcessorABC):
         events_cache = events.caches[0]
 
         reco_jets = self.jet_factory.build(sel_jets, lazy_cache=events_cache)
-        reco_jets = reco_jets[reco_jets.pt>20]
         gen_jets = reco_jets.matched_gen
+
+        
+        ############ Derive LHE flavour   ###########
+        #### (does not work for the QCD data sample because it is lacking LHE flav  ) ####
+        """ Algorithm for the flavour derivation:
+        - Find all the matched outgoing LHE particles within dR<0.4
+        - If there is at least one LHE particle with b flavour (bbar flavour), set LHE_flavour to 5 (-5). If both b and bbar are found, set LHE_flavour=0
+        - If there is no b quark then: 
+        If there is at least one LHE particle with c flavour (cbar flavour), set LHE_flavour to 4 (-4).
+        If both are found, set LHE_flavour=0.
+        - If none of the above:
+        Assign the flavour of the hardest selected LHE particle.
+        """
+
+        lhe_part_exists = True
+        if lhe_part_exists:
+                LHE_flavour = ak.zeros_like(reco_jets.hadronFlavour)
+                jet_shape = ak.num(reco_jets.hadronFlavour)
+                LHE_flavour_np = ak.flatten(LHE_flavour).to_numpy()
+
+                LHEPart = events.LHEPart
+                absLHEid = np.abs(LHEPart.pdgId)
+                LHE_outgoing = LHEPart[(LHEPart.status==1) & ((absLHEid < 6) | (absLHEid == 21))]
+                drs, [_, LHE_match] = reco_jets.metric_table(LHE_outgoing, return_combinations=True, axis=1)
+                LHE_match = LHE_match[drs<0.4]
+
+                b_criteria      = ak.any((LHE_match.pdgId==5),axis=2)
+                bbar_criteria   = ak.any((LHE_match.pdgId==-5),axis=2)
+                c_criteria      = ak.any((LHE_match.pdgId==4),axis=2)
+                cbar_criteria   = ak.any((LHE_match.pdgId==-4),axis=2)
+                rest_crit = ((LHE_match.pdgId==1) | (LHE_match.pdgId==2) | (LHE_match.pdgId==3) | (LHE_match.pdgId==-1)
+        |                   (LHE_match.pdgId==-2) | (LHE_match.pdgId==-3) | (LHE_match.pdgId==21))
+                rest_match_candidates = LHE_match[rest_crit]
+                rest_match = rest_match_candidates[ak.argmax(rest_match_candidates.pt, axis=2, keepdims=True )]
+                #for some reason it does not work with just one ak.flatten
+                rest_flav_ids = ak.flatten(ak.flatten(rest_match.pdgId, axis=-1 )).to_numpy() 
+
+                LHE_flavour_np[~rest_flav_ids.mask] = rest_flav_ids[~rest_flav_ids.mask]
+
+                c_cri_np = ak.flatten(c_criteria & ~cbar_criteria).to_numpy()
+                LHE_flavour_np[c_cri_np] = 4
+                cbar_cri_np = ak.flatten(cbar_criteria & ~c_criteria).to_numpy()
+                LHE_flavour_np[cbar_cri_np] = -4
+                c_criteria_unknown = ak.flatten(cbar_criteria & c_criteria).to_numpy()
+                LHE_flavour_np[c_criteria_unknown] = 0
+                b_criteria_np = ak.flatten(b_criteria & ~bbar_criteria ).to_numpy()
+                LHE_flavour_np[b_criteria_np] = 5
+                bbar_criteria_np = ak.flatten(bbar_criteria & ~b_criteria).to_numpy()
+                LHE_flavour_np[bbar_criteria_np] = -5
+                b_criteria_unknown = ak.flatten(bbar_criteria & b_criteria).to_numpy()
+                LHE_flavour_np[b_criteria_unknown] = 0
+
+                reco_jets["LHE_Flavour"] = ak.unflatten(LHE_flavour_np, jet_shape)
+
 
                 # jetpt = jets.pt
         # corrected_jetpt = corrected_jets.pt
@@ -193,39 +341,32 @@ class Processor(processor.ProcessorABC):
         
         gen_jetpt  = ak.flatten(gen_jets.pt).to_numpy( allow_missing=True)
         gen_jeteta = ak.flatten(gen_jets.eta).to_numpy( allow_missing=True)
-        jetpt             = ak.flatten(reco_jets.pt).to_numpy( allow_missing=True)
-        jeteta            = ak.flatten(reco_jets.eta).to_numpy( allow_missing=True)
+        jetpt      = ak.flatten(reco_jets.pt).to_numpy( allow_missing=True)
+        jeteta     = ak.flatten(reco_jets.eta).to_numpy( allow_missing=True)
         
         etabins_abs = etabins[(len(etabins)-1)//2:] ##the positive eta bins
         ptresponse_np = jetpt / gen_jetpt
         correction_pos_pt = len(ptbins) - np.count_nonzero(np.array(gen_jetpt, ndmin=2).transpose() < ptbins, axis=1)
         correction_pos_eta = len(etabins_abs) - np.count_nonzero(np.abs(np.array(gen_jeteta, ndmin=2).transpose()) < etabins_abs, axis=1)
         
-#         print("gen_jetpt = ", gen_jetpt)
-#         print("gen_jetpt np = ", gen_jetpt)
+        ptresponse_np = jetpt / gen_jetpt # / self.closure_corr[correction_pos_pt, correction_pos_eta]
         
-#         ptresponse_np = jetpt / gen_jetpt
-        ptresponse_np = jetpt / gen_jetpt / self.closure_corr[correction_pos_pt, correction_pos_eta]
-#         ptresponse = jetpt / gen_jetpt 
-        
-#         print("corr pos = ", [correction_pos_pt[:10], correction_pos_eta[:10]])
-#         print("closure = ", self.closure_corr[correction_pos_pt[:10], correction_pos_eta[:10]])
-#         print("ptresp = ", ptresponse)
-#         print("ptresp_np = ", ptresponse_np)
-        
+#         jet_flavour = reco_jets.partonFlavour
+#         jet_flavour = reco_jets.LHE_Flavour2
+        jet_flavour = reco_jets.LHE_Flavour
         
         subsamples = self.subsamples
         masks = {}
-        masks['b'] = ak.flatten((reco_jets.partonFlavour==5) | (reco_jets.partonFlavour==-5)).to_numpy( allow_missing=True)
-        masks['c'] = ak.flatten((reco_jets.partonFlavour==4) | (reco_jets.partonFlavour==-4)).to_numpy( allow_missing=True)
-        masks['ud'] = ak.flatten((reco_jets.partonFlavour==1) | (reco_jets.partonFlavour==-1) |
-                     (reco_jets.partonFlavour==2) | (reco_jets.partonFlavour==-2) ).to_numpy( allow_missing=True)
-        masks['s'] = ak.flatten((reco_jets.partonFlavour==3) | (reco_jets.partonFlavour==-3) ).to_numpy( allow_missing=True)
-        masks['g'] = ak.flatten(reco_jets.partonFlavour==21).to_numpy( allow_missing=True)
+        masks['b'] = ak.flatten((jet_flavour==5) | (jet_flavour==-5)).to_numpy( allow_missing=True)
+        masks['c'] = ak.flatten((jet_flavour==4) | (jet_flavour==-4)).to_numpy( allow_missing=True)
+        masks['ud'] = ak.flatten((jet_flavour==1) | (jet_flavour==-1) |
+                     (jet_flavour==2) | (jet_flavour==-2) ).to_numpy( allow_missing=True)
+        masks['s'] = ak.flatten((jet_flavour==3) | (jet_flavour==-3) ).to_numpy( allow_missing=True)
+        masks['g'] = ak.flatten(jet_flavour==21).to_numpy( allow_missing=True)
 
-        ptresponses     = { sample: ptresponse_np[masks[sample]]             for sample in subsamples }
-        gen_jetpts      = { sample: gen_jetpt[masks[sample]]       for sample in subsamples }
-        gen_jetetas     = { sample: gen_jeteta[masks[sample]]      for sample in subsamples }
+        ptresponses     = { sample: ptresponse_np[masks[sample]]        for sample in subsamples }
+        gen_jetpts      = { sample: gen_jetpt[masks[sample]]            for sample in subsamples }
+        gen_jetetas     = { sample: gen_jeteta[masks[sample]]           for sample in subsamples }
 
         # print("Try to np:")
         # ak.flatten(gen_jetpt).to_numpy()
