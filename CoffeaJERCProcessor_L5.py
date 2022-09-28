@@ -55,13 +55,13 @@ class Processor(processor.ProcessorABC):
         # jetphi_axis = hist.Bin("jetphi", r"Jet $\phi$", 50, -np.pi, np.pi)
 
         
-        subsamples = ['b', 'c', 'ud', 's', 'g']
+        subsamples = ['b', 'c', 'ud', 's', 'g', 'bbar', 'cbar', 'udbar', 'sbar']
         self.subsamples = subsamples
         acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in subsamples}
         acc_dict['ptresponse']  = hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis)
         acc_dict['jetpt']       = hist.Hist("Counts", dataset_axis, jetpt_axis)
         acc_dict['jeteta']      = hist.Hist("Counts", dataset_axis, jeteta_axis)
-        acc_dict['cutflow']     = processor.defaultdict_accumulator(int)
+        acc_dict['cutflow']     = processor.defaultdict_accumulator(dict)
 
         self._accumulator = processor.dict_accumulator(acc_dict)
         
@@ -135,6 +135,8 @@ class Processor(processor.ProcessorABC):
     
         # Event Cuts
         # apply npv cuts
+        output['cutflow'][dataset+': all events'] = len(events)
+        
         npvCut = (events.PV.npvsGood > 0)
         pvzCut = (np.abs(events.PV.z) < 24)
         rxyCut = (np.sqrt(events.PV.x*events.PV.x + events.PV.y*events.PV.y) < 2)
@@ -143,6 +145,7 @@ class Processor(processor.ProcessorABC):
 
         # get GenJets and Jets
         jets = selectedEvents.Jet
+        output['cutflow'][dataset+': all jets'] = ak.sum(ak.num(jets))
         
         lhe_part_exists = False
 #         try:
@@ -223,10 +226,11 @@ class Processor(processor.ProcessorABC):
         # At least one matched (dressed) electron/muon found
         dressed_electron_mask = ak.sum(ak.is_none(jets.matched_electrons,axis=2), axis=2)==2
         dressed_muon_mask     = ak.sum(ak.is_none(jets.matched_muons,axis=2), axis=2)==2
-        jet_mask = jet_gen_match_mask & dressed_electron_mask & dressed_muon_mask # & jet_pt_mask
-        
+        jet_mask = jet_gen_match_mask & dressed_electron_mask & dressed_muon_mask
+            
         selected_jets = jets[jet_mask]
-        
+        output['cutflow'][dataset+': gen matched + no dressed lep'] = ak.sum(ak.num(selected_jets))
+
 
         jet_pt_mask = selected_jets.matched_gen.pt>20
         ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
@@ -235,11 +239,13 @@ class Processor(processor.ProcessorABC):
         jet_pt_mask_np = ak.flatten(jet_pt_mask).to_numpy()
         jet_pt_mask = ak.unflatten(jet_pt_mask_np.data, jet_pt_mask_shape)
         sel_jets = selected_jets[jet_pt_mask]
-
+        
+        
                 # Cut on overlapping jets
         drs, _ = sel_jets.metric_table(sel_jets, return_combinations=True, axis=1)
         jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
         sel_jets = sel_jets[jet_iso_mask]
+        output['cutflow'][dataset+': iso jets'] = ak.sum(ak.num(sel_jets))
 
         # print("jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_mask")
         
@@ -357,11 +363,14 @@ class Processor(processor.ProcessorABC):
         
         subsamples = self.subsamples
         masks = {}
-        masks['b'] = ak.flatten((jet_flavour==5) | (jet_flavour==-5)).to_numpy( allow_missing=True)
-        masks['c'] = ak.flatten((jet_flavour==4) | (jet_flavour==-4)).to_numpy( allow_missing=True)
-        masks['ud'] = ak.flatten((jet_flavour==1) | (jet_flavour==-1) |
-                     (jet_flavour==2) | (jet_flavour==-2) ).to_numpy( allow_missing=True)
-        masks['s'] = ak.flatten((jet_flavour==3) | (jet_flavour==-3) ).to_numpy( allow_missing=True)
+        masks['b'] = ak.flatten((jet_flavour==5)).to_numpy( allow_missing=True)
+        masks['c'] = ak.flatten((jet_flavour==4)).to_numpy( allow_missing=True)
+        masks['ud'] = ak.flatten((jet_flavour==1) | (jet_flavour==2)).to_numpy( allow_missing=True)
+        masks['s'] = ak.flatten((jet_flavour==3) ).to_numpy( allow_missing=True)
+        masks['bbar'] = ak.flatten((jet_flavour==-5)).to_numpy( allow_missing=True)
+        masks['cbar'] = ak.flatten((jet_flavour==-4)).to_numpy( allow_missing=True)
+        masks['udbar'] = ak.flatten((jet_flavour==-1) | (jet_flavour==-2) ).to_numpy( allow_missing=True)
+        masks['sbar'] = ak.flatten((jet_flavour==-3) ).to_numpy( allow_missing=True)
         masks['g'] = ak.flatten(jet_flavour==21).to_numpy( allow_missing=True)
 
         ptresponses     = { sample: ptresponse_np[masks[sample]]        for sample in subsamples }

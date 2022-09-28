@@ -27,6 +27,7 @@ def main():
     from CoffeaJERCProcessor_L5 import Processor
     
     UsingDaskExecutor = True
+    CERNCondorCluster = False
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False     ### True if run only on one file
@@ -38,7 +39,7 @@ def main():
     
     exec('from CoffeaJERCProcessor'+tag+' import Processor') 
     
-    add_tag = '_LHEflav1_TTBAR-JME' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #'_LHEflav_TTBAR-JME'
+    add_tag = '_LHEflav1_Herwig-TTBAR-JME' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
     if fine_etabins:
         add_tag='_fine_etaBins'+add_tag
     tag_full = tag+add_tag
@@ -48,6 +49,9 @@ def main():
     
     if load_preexisting == True:
         UsingDaskExecutor = False
+        
+    if UsingDaskExecutor == False:
+        CERNCondorCluster = False
         
     if not os.path.exists("out"):
         os.mkdir("out")
@@ -69,18 +73,45 @@ def main():
     dataset = 'fileNames/fileNames_QCD20UL18.txt'
     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
-#     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
-    
+    dataset = 'fileNames/fileNames_TTToDilep20UL18_JMENano.txt'
+    dataset = 'fileNames/fileNames_TTToHad20UL18_JMENano.txt'
     
     rootfiles = open(dataset).read().split()
     
     fileslist = [xrootdstr + file for file in rootfiles]
-    fileslist = fileslist[:100] # if add_tag=='QCD' else fileslist # :20 to skim the events
+    fileslist = fileslist[:500] # if add_tag=='QCD' else fileslist # :20 to skim the events
+    
+    def find_xsec(key):
+        semilepxsec = 0.108*3*0.337*2*2
+        dilepxsec = 0.108*3*0.108*3
+        hadxsec = 0.337*2*0.337*2
+    
+        if "TTToSemi" in key:
+            xsec = semilepxsec
+        elif "TTToDilep" in key:
+            xsec = dilepxsec
+        elif "TTToHad" in key:
+            xsec = hadxsec
+        else:
+            xsec = 1
+        return xsec
+    
+    xsec = find_xsec(dataset)
+    
+    datasets = ['fileNames/fileNames_TTToSemi20UL18_JMENano.txt',
+               'fileNames/fileNames_TTToDilep20UL18_JMENano.txt',
+               'fileNames/fileNames_TTToHad20UL18_JMENano.txt'
+               ]
+    
+    for data_s in datasets:
+        rootfiles = open(dataset).read().split()
+        fileslist = [xrootdstr + file for file in rootfiles]
+        fileslist = fileslist[:40]
+    filesets = {'QCD': {"files": fileslist, "metadata": {"xsec": xsec}}}
     
     fileslist = fileslist
     if test_run:
         fileslist = [fileslist[1]]
-        ### The smallest file in the RunIISummer20UL18NanoAODv9 dataset
     
     import os
     
@@ -98,17 +129,44 @@ def main():
     ff.keys()
     ff.close()
     
-    
     if(UsingDaskExecutor and CoffeaCasaEnv):
         client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")
         client.upload_file('CoffeaJERCProcessor.py')
     
     if(UsingDaskExecutor and not CoffeaCasaEnv):
+        from dask.distributed import Client 
+        if not CERNCondorCluster:
+            client = Client()
+    
+        else:
+            from dask_lxplus import CernCluster
+            import socket
+    
+            cluster = CernCluster(
+                cores = 4,
+                memory = '1000MB',
+                disk = '20MB',
+                death_timeout = '60',
+                lcg = True,
+                nanny = False,
+                container_runtime = 'none',
+                log_directory = '/eos/user/a/anpotreb/condor/log',
+                scheduler_options = {
+                    'port': 8786,
+                    'host': socket.gethostname(),
+                },
+                job_extra = {
+                    'MY.JobFlavour': '"espresso"',
+        #             'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/CoffeaJERCProcessor_L5.py',
+                },
+            )
+            cluster.adapt(minimum=1, maximum=30)
+            cluster.scale(8)
+            client = Client(cluster)
         
-        
-        from dask.distributed import Client
-        client = Client()
         client.upload_file('CoffeaJERCProcessor'+tag+'.py')
+    
+        client
     
     tstart = time.time()
     
@@ -118,7 +176,7 @@ def main():
     prng = RandomState(seed)
     Chunk = [10000, 5] # [chunksize, maxchunks]
     
-    filesets = {'QCD': fileslist}
+    filesets = {'QCD': {"files": fileslist, "metadata": {"xsec": xsec}}}
     
     if not load_preexisting:
         for name,files in filesets.items(): 
@@ -149,15 +207,20 @@ def main():
                                                   chunksize=Chunk[0])#, maxchunks=Chunk[1])
     
         elapsed = time.time() - tstart
+        print("Processor finished. Time elapsed: ", elapsed)
         outputs_unweighted[name] = output
+        print("Saving the output histograms under: ", outname)
         util.save(output, outname)
         outputs_unweighted[name] = output
-        print(name + ' unweighted output loaded')
     else:
-        # output = util.load('out/CoffeaJERCOutputs_binned.coffea')
         output = util.load(outname)
-        
-    elapsed = time.time() - tstart
+        print("Loaded histograms from: ", outname)
+       
+    
+    if UsingDaskExecutor:
+        client.close()
+        if CERNCondorCluster or CoffeaCasaEnv:
+            cluster.close()
     
     def gauss(x, *p):
         A, mu, sigma = p
@@ -191,11 +254,75 @@ def main():
     plt.rcParams['figure.subplot.left'] = 0.162
     plt.rcParams['figure.dpi'] = 150
     
+                
+    
+        
+    
+        
+    
+    combineTTbar = False
+    if combineTTbar==True:
+        N_evts_had = 41113000
+        N_evts_semilep = 48065000
+        N_evts_dilep = 41160000
+    
+        N_evts = np.array([N_evts_had, N_evts_semilep, N_evts_dilep])
+    
+        N_av = (N_evts_had+N_evts_semilep+N_evts_dilep)/3
+    
+        semilepxsec = 0.108*3*0.337*2*2
+        dilepxsec = 0.108*3*0.108*3
+        hadxsec = 0.337*2*0.337*2
+    
+        xsec = np.array([hadxsec, semilepxsec, dilepxsec])
+        weights = N_evts/N_av*xsec
+    
+        # (N_evts/N_av*xsec).sum()
+    
+        add_tags = ['_LHEflav1_TTBAR-Had-JME', '_LHEflav1_TTBAR-JME', '_LHEflav1_TTBAR-Dilep-JME']
+        tag_fulls = [tag+addtag for addtag in add_tags]
+        outnames = ['out/CoffeaJERCOutputs'+tag_full+'.coffea' for tag_full in tag_fulls]
+    
+        outputs = [util.load(outname) for outname in outnames]
+        
+        tag_full = tag + '_LHEflav1_TTBAR-Inclusive-JME'
+    
+        
+        
+    
+            
+    
+                
+            
+    
     import warnings
+    barable_samples = ['_b', '_c', '_s', 'ud_']
     
     def fit_responses(output, samp='_b'):
         warnings.filterwarnings('ignore')
+        
+            
+        
+        if combineTTbar:
+            if combine_antiflavour and (samp in barable_samples):
+                response_hist = outputs[0]['ptresponse'+samp].copy() + outputs[0]['ptresponse'+samp+'bar'].copy()            
+            else:
+                response_hist = outputs[0]['ptresponse'+samp].copy()
+            response_hist.scale(weights[0])
+            for out, wg in zip(outputs[1:], weights[1:]):
+                if combine_antiflavour and (samp in barable_samples):
+                    response_hist2 = out['ptresponse'+samp].copy() + out['ptresponse'+samp+'bar'].copy()
+                else:
+                    response_hist2 = out['ptresponse'+samp].copy()
+                response_hist2.scale(wg)
+                response_hist.add(histo2)
+        else:
+            if combine_antiflavour and (samp in barable_samples):
+                response_hist = output['ptresponse'+samp] + output['ptresponse'+samp+'bar']
+            else:
+                response_hist = output['ptresponse'+samp]
     
+        
         mean = np.zeros((jetpt_length, jeteta_length))
         medians = np.zeros((jetpt_length, jeteta_length))
         medianstds = np.zeros((jetpt_length, jeteta_length))
@@ -209,9 +336,9 @@ def main():
         if not os.path.exists(FitFigDir):
             os.mkdir(FitFigDir)
             
-        xvals = output['ptresponse'+samp].axis('ptresponse').centers()[1:] #[1:] to exclude the second peak for low pt
+        xvals = response_hist.axis('ptresponse').centers()[1:] #[1:] to exclude the second peak for low pt
         f_xvals = np.linspace(0,max(xvals),5001)
-        response_edges = output['ptresponse'+samp].axis('ptresponse').edges()[1:]
+        response_edges = response_hist.axis('ptresponse').edges()[1:]
     
         for i in range(jetpt_length):
             ptBin = hist.Interval(ptbins[i], ptbins[i+1])
@@ -229,9 +356,10 @@ def main():
                 eta_string = eta_string.replace('.','')
                 
                 # The name integrate is a bit misleasding in this line. Is there another way to "slice" a histogram? //Andris
-                histoMi = output['ptresponse'+samp].integrate('jeteta', etaBinMi).integrate('pt', ptBin)
-                histoPl = output['ptresponse'+samp].integrate('jeteta', etaBinPl).integrate('pt', ptBin)
+                histoMi = response_hist.integrate('jeteta', etaBinMi).integrate('pt', ptBin)
+                histoPl = response_hist.integrate('jeteta', etaBinPl).integrate('pt', ptBin)
                 histo = (histoMi+histoPl)
+                    
                 yvals = histo.values()[('QCD',)][1:]  #[1:] to exclude the second peak for low pt
     
                 N = histo.integrate('ptresponse').values()[('QCD',)]-histo.values()[('QCD',)][0]
@@ -328,12 +456,6 @@ def main():
         return [mean, meanvar, medians, medianstds] #width, 
         
     
-    df_csv = pd.read_csv('out_txt/Closure_L5_QCD.csv').set_index('etaBins')
-    closure_corr = df_csv.to_numpy().transpose()
-    closure_corr = np.pad(closure_corr,1,constant_values=1)
-    
-    legend_tmp = f'{0:0.0f}'+r'$<\eta<$'+f'{1:0.0f}'
-    
     def plot_corrections(mean, samp, meanstd):
         ### To ignore the points with 0 on y axis when setting the y axis limits
         mean_p = mean.copy()
@@ -369,7 +491,7 @@ def main():
         ax.set_xticks([20, 50, 100, 500, 1000, 5000])
         ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
         ax.set_xlabel(r'$p_T$ (GeV)');
-        ax.set_ylabel(r'median response');
+        ax.set_ylabel(r'mean response');
         ax.legend()
         if test_run:
             plt.savefig('test/fig/corr_vs_pt'+samp+tag_full+'_test.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
@@ -444,10 +566,8 @@ def main():
         data = df_csv.to_numpy().transpose()
         return data
     
-                
-    
-    load_fit_res=False
-    subsamples = ['', '_b', '_c', '_ud', '_s', '_g']
+    combine_antiflavour = False
+    subsamples = ['_b', '_c', '_ud', '_s', '_g', '_bbar', '_cbar', '_udbar', '_sbar']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
@@ -467,9 +587,7 @@ def main():
         if fine_etabins:
             plot_corrections_eta(median, samp, medianstd)
         else:
-            plot_corrections(median, samp, medianstd)
-    
-    
+            plot_corrections(mean, samp, meanstd)
     
     print('-----'*10)
     print("All done. Congrats!")
