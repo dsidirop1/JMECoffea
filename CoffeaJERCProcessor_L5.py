@@ -226,7 +226,7 @@ class Processor(processor.ProcessorABC):
         # At least one matched (dressed) electron/muon found
         dressed_electron_mask = ak.sum(ak.is_none(jets.matched_electrons,axis=2), axis=2)==2
         dressed_muon_mask     = ak.sum(ak.is_none(jets.matched_muons,axis=2), axis=2)==2
-        jet_mask = jet_gen_match_mask & dressed_electron_mask & dressed_muon_mask
+        jet_mask = jet_gen_match_mask  & dressed_electron_mask & dressed_muon_mask
             
         selected_jets = jets[jet_mask]
         output['cutflow'][dataset+': gen matched + no dressed lep'] = ak.sum(ak.num(selected_jets))
@@ -240,11 +240,14 @@ class Processor(processor.ProcessorABC):
         jet_pt_mask = ak.unflatten(jet_pt_mask_np.data, jet_pt_mask_shape)
         sel_jets = selected_jets[jet_pt_mask]
         
+        output['cutflow'][dataset+': + jetpt>20'] = ak.sum(ak.num(sel_jets))
+        
         
                 # Cut on overlapping jets
         drs, _ = sel_jets.metric_table(sel_jets, return_combinations=True, axis=1)
         jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
         sel_jets = sel_jets[jet_iso_mask]
+        
         output['cutflow'][dataset+': iso jets'] = ak.sum(ak.num(sel_jets))
 
         # print("jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_mask")
