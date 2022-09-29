@@ -27,26 +27,29 @@ def main():
     from CoffeaJERCProcessor_L5 import Processor
     
     UsingDaskExecutor = True
-    CERNCondorCluster = False
+    CERNCondorCluster = True
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False     ### True if run only on one file
     load_fit_res      = False
     
     fine_etabins      = False
+    one_bin           = False
     
     tag = '_L5'
     
     exec('from CoffeaJERCProcessor'+tag+' import Processor') 
     
-    add_tag = '_LHEflav1_Herwig-TTBAR-JME' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
-    if fine_etabins:
-        add_tag='_fine_etaBins'+add_tag
+    add_tag = '_LHEflav1_TTBAR-JME-condortest' #Herwig-TTBAR-JME-noIso' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
+    
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
     outname = outname+'_test' if test_run else outname
     
+    if one_bin:
+        tag_full='_oneBin'+tag_full
+        
     if load_preexisting == True:
         UsingDaskExecutor = False
         
@@ -73,13 +76,13 @@ def main():
     dataset = 'fileNames/fileNames_QCD20UL18.txt'
     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
-    dataset = 'fileNames/fileNames_TTToDilep20UL18_JMENano.txt'
-    dataset = 'fileNames/fileNames_TTToHad20UL18_JMENano.txt'
+#     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
+    
     
     rootfiles = open(dataset).read().split()
     
     fileslist = [xrootdstr + file for file in rootfiles]
-    fileslist = fileslist[:500] # if add_tag=='QCD' else fileslist # :20 to skim the events
+    fileslist = fileslist[:1] # if add_tag=='QCD' else fileslist # :20 to skim the events
     
     def find_xsec(key):
         semilepxsec = 0.108*3*0.337*2*2
@@ -143,8 +146,8 @@ def main():
             import socket
     
             cluster = CernCluster(
-                cores = 4,
-                memory = '1000MB',
+                cores = 1,
+                memory = '1200MB',
                 disk = '20MB',
                 death_timeout = '60',
                 lcg = True,
@@ -156,11 +159,11 @@ def main():
                     'host': socket.gethostname(),
                 },
                 job_extra = {
-                    'MY.JobFlavour': '"espresso"',
+                    'MY.JobFlavour': '"workday"', #'"longlunch"',
         #             'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/CoffeaJERCProcessor_L5.py',
                 },
             )
-            cluster.adapt(minimum=1, maximum=30)
+            cluster.adapt(minimum=2, maximum=50)
             cluster.scale(8)
             client = Client(cluster)
         
@@ -229,15 +232,19 @@ def main():
     f_xvals = np.linspace(0,5,5001)
     
     if fine_etabins==True:
-        ptbins = np.array([15, 40, 150, 400, 4000,10000])
+        ptbins = np.array([15, 40, 150, 400, 4000, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
         etabins = output['ptresponse'].axis('jeteta').edges()
+    elif one_bin==True:
+        ptbins = np.array([15, 10000])
+        ptbins_c = (ptbins[:-1]+ptbins[1:])/2
+        etabins = np.array([etabins[0], 0, etabins[-1]])
     else:
         ptbins = output['ptresponse'].axis('pt').edges()
         ptbins_c = output['ptresponse'].axis('pt').centers()
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
-        
     
+        
     jetpt_length = len(ptbins)-1
     jeteta_length = (len(etabins)-1)//2
     
@@ -294,6 +301,8 @@ def main():
     
                 
             
+    
+    combine_antiflavour = False
     
     import warnings
     barable_samples = ['_b', '_c', '_s', 'ud_']
@@ -428,7 +437,7 @@ def main():
     
        ####################### Plotting ############################
     
-            if not test_run and (not fine_etabins) and False:
+            if not test_run and (not fine_etabins) and True:
                     histo = histo.rebin('ptresponse', plot_response_axis)
     
                     fig, ax2 = plt.subplots();
@@ -446,8 +455,6 @@ def main():
                     plt.text(0.03,0.66*h,r'N data = {0:0.3g}'.format(N))
                     ax2.legend();
     
-                    plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
-                    plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
                     plt.close();                
     
         print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
@@ -462,7 +469,7 @@ def main():
         mean_p[mean_p==0] = np.nan
     
         fig, ax = plt.subplots()
-        start = np.where(ptbins<=20)[0][-1]
+        start = np.searchsorted(ptbins_c, 20, side='left') #np.where(ptbins<=20)[0][-1]
         
         ptbins_plot = ptbins_c[start:]
         meanstd = meanstd[start:,:]
@@ -566,8 +573,11 @@ def main():
         data = df_csv.to_numpy().transpose()
         return data
     
+    medians = []
+    medianstds = []
+    
     combine_antiflavour = False
-    subsamples = ['_b', '_c', '_ud', '_s', '_g', '_bbar', '_cbar', '_udbar', '_sbar']
+    subsamples = ['', '_b', '_c', '_ud', '_s', '_g', '_bbar', '_cbar', '_udbar', '_sbar']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
@@ -579,15 +589,19 @@ def main():
             medianstd = read_data("MedianStd", samp)
         else:
             mean, meanvar, median, medianstd = fit_responses(output, samp)
+            medians.append(median[0][0])
+            medianstds.append(medianstd[0][0])
             for data, name in zip([mean, meanvar, median, medianstd],["Mean", "MeanVar", "Median", "MedianStd"]):
                 save_data(data, name, samp)
                 
         meanstd = np.sqrt(meanvar)
                 
-        if fine_etabins:
+        if fine_etabins or one_bin:
             plot_corrections_eta(median, samp, medianstd)
         else:
             plot_corrections(mean, samp, meanstd)
+    
+    
     
     print('-----'*10)
     print("All done. Congrats!")
