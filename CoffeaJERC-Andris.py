@@ -1,5 +1,9 @@
 def main():
     
+    from notebook.services.config import ConfigManager
+    c = ConfigManager()
+    c.update('notebook', {"CodeCell": {"cm_config": {"autoCloseBrackets": False}}})
+    
     import bokeh
     import time
     import copy
@@ -36,12 +40,13 @@ def main():
     fine_etabins      = False
     one_bin           = False
     
+    Nfiles = -1
+    
     tag = '_L5'
     
     exec('from CoffeaJERCProcessor'+tag+' import Processor') 
-    
-    add_tag = '_LHEflav1_TTBAR-JME-condortest' #Herwig-TTBAR-JME-noIso' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
-    
+#     add_tag = '_LHEflav1_TTBAR-Summer16'
+    add_tag = '_LHEflav1_TTBAR-JME' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -66,8 +71,15 @@ def main():
         os.mkdir("test/")
         os.mkdir("test/out_txt")
         os.mkdir("test/fig")
+        
+    if test_run:
+        Nfiles = 1
     
-    xrootdstr = 'root://cmsxrootd.fnal.gov/'
+    xrootdstr = 'root://cms-xrd-global.cern.ch//'
+#     xrootdstr = 'root://stormgf2.pi.infn.it:1094/'
+#     xrootdstr = 'root://cmsxrootd.fnal.gov/'
+#     xrootdstr = 'root://xrootd-cms.infn.it/'
+    xrootdstr = 'root://mover.pp.rl.ac.uk:1094/pnfs/pp.rl.ac.uk/data/cms/'
     
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
@@ -77,12 +89,31 @@ def main():
     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
 #     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
+#     dataset = 'fileNames/fileNames_TT_Summer16cFlip.txt'
+#     dataset = 'fileNames/fileNames_TT_Summer16.txt'
     
-    
-    rootfiles = open(dataset).read().split()
+    with open(dataset) as f:
+        rootfiles = f.read().split()
     
     fileslist = [xrootdstr + file for file in rootfiles]
-    fileslist = fileslist[:1] # if add_tag=='QCD' else fileslist # :20 to skim the events
+#     fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer20UL18NanoAODv9/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/230000/0E7E5FE2-DD10-CB4C-A794-865FF5E7E505.root']
+    fileslist = fileslist[:Nfiles] # if add_tag=='QCD' else fileslist # :20 to skim the events
+    
+    dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano_redi.txt'
+#     dataset = 'fileNames/fileNames_TT_Summer16cFlip_redi.txt'
+    
+    #### dataset with files already with redirectors of the corresponding tiers
+    with open(dataset) as f:
+        rootfiles = f.read().split()
+    fileslist = rootfiles[:Nfiles]
+    
+#     fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/8D4B8C15-99B0-044A-9477-3864B1B2206B.root', #good file
+#              'root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/55E72333-8846-D040-90FF-266FCA3EF67B.root', #bad file
+#                  'root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/065A2F01-2963-C14D-96E2-50282818F6DD.root',
+# #              'root://grid-dcache.physik.rwth-aachen.de:1094////store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/E6694A4B-483C-BB42-AC66-187B1FE69CCF.root' #bad file2
+#             ] 
+    
+    print(f'Runing on dataset {dataset}\n Number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}')
     
     def find_xsec(key):
         semilepxsec = 0.108*3*0.337*2*2
@@ -101,20 +132,22 @@ def main():
     
     xsec = find_xsec(dataset)
     
-    datasets = ['fileNames/fileNames_TTToSemi20UL18_JMENano.txt',
-               'fileNames/fileNames_TTToDilep20UL18_JMENano.txt',
-               'fileNames/fileNames_TTToHad20UL18_JMENano.txt'
-               ]
+    combineTTbar = False
     
-    for data_s in datasets:
-        rootfiles = open(dataset).read().split()
-        fileslist = [xrootdstr + file for file in rootfiles]
-        fileslist = fileslist[:40]
-    filesets = {'QCD': {"files": fileslist, "metadata": {"xsec": xsec}}}
+    file_tags = ['Semi', 'Dilep', 'Had']
     
-    fileslist = fileslist
-    if test_run:
-        fileslist = [fileslist[1]]
+    filesets = {}
+    if combineTTbar:
+        for ftag in file_tags:
+            data_name = f'fileNames/fileNames_TTTo{ftag}20UL18_JMENano.txt'
+            with open(data_name) as f:
+                rootfiles = f.read().split()
+            fileslist = [xrootdstr + file for file in rootfiles]
+            fileslist = fileslist[:Nfiles]
+            xsec = find_xsec(data_name)
+            filesets[ftag] = {"files": fileslist, "metadata": {"xsec": xsec}}
+    else:
+        filesets = {'QCD': {"files": fileslist, "metadata": {"xsec": xsec}}}
     
     import os
     
@@ -125,6 +158,7 @@ def main():
         print("os.environ['X509_USER_PROXY'] ",os.environ['X509_USER_PROXY'])
     os.environ['X509_CERT_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/certificates'
     os.environ['X509_VOMS_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/vomsdir'
+    os.environ['X509_USER_CERT'] = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
     import uproot
     
@@ -136,6 +170,12 @@ def main():
         client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")
         client.upload_file('CoffeaJERCProcessor.py')
     
+    env_extra = [
+                'export XRD_RUNFORKHANDLER=1',
+                f'export X509_USER_PROXY=/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem',
+                f'export X509_CERT_DIR={os.environ["X509_CERT_DIR"]}',
+            ]
+    
     if(UsingDaskExecutor and not CoffeaCasaEnv):
         from dask.distributed import Client 
         if not CERNCondorCluster:
@@ -146,9 +186,10 @@ def main():
             import socket
     
             cluster = CernCluster(
+                env_extra=env_extra,
                 cores = 1,
-                memory = '1200MB',
-                disk = '20MB',
+                memory = '4300MB',
+                disk = '2000MB',
                 death_timeout = '60',
                 lcg = True,
                 nanny = False,
@@ -159,11 +200,13 @@ def main():
                     'host': socket.gethostname(),
                 },
                 job_extra = {
-                    'MY.JobFlavour': '"workday"', #'"longlunch"',
-        #             'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/CoffeaJERCProcessor_L5.py',
+                    'MY.JobFlavour': '"longlunch"',
+#                     'MY.JobFlavour': '"espresso"',
+                    'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/coffea/count_2d.py,/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/coffea/processor/executor.py',
+#                                             ]
                 },
             )
-            cluster.adapt(minimum=2, maximum=50)
+            cluster.adapt(minimum=2, maximum=100)
             cluster.scale(8)
             client = Client(cluster)
         
@@ -179,42 +222,39 @@ def main():
     prng = RandomState(seed)
     Chunk = [10000, 5] # [chunksize, maxchunks]
     
-    filesets = {'QCD': {"files": fileslist, "metadata": {"xsec": xsec}}}
-    
     if not load_preexisting:
-        for name,files in filesets.items(): 
-            if not UsingDaskExecutor:
-                chosen_exec = 'futures'
-                output = processor.run_uproot_job({name:files},
-                                                  treename='Events',
-                                                  processor_instance=Processor(),
-                                                  executor=processor.iterative_executor,
-            #                                        executor=processor.futures_executor,
-                                                  executor_args={
-                                                      'skipbadfiles':False,
-                                                      'schema': NanoAODSchema, #BaseSchema
-                                                      'workers': 2},
-                                                  chunksize=Chunk[0])#, maxchunks=Chunk[1])
-            else:
-                chosen_exec = 'dask'
-                output = processor.run_uproot_job({name:files},
-                                                  treename='Events',
-                                                  processor_instance=Processor(),
-                                                  executor=processor.dask_executor,
-                                                  executor_args={
-                                                      'client': client,
-                                                      'skipbadfiles':False,
-                                                      'schema': NanoAODSchema, #BaseSchema
-        #                                               'workers': 2
-                                                  },
-                                                  chunksize=Chunk[0])#, maxchunks=Chunk[1])
+        if not UsingDaskExecutor:
+            chosen_exec = 'futures'
+            output = processor.run_uproot_job({name:files},
+                                              treename='Events',
+                                              processor_instance=Processor(),
+                                              executor=processor.iterative_executor,
+        #                                        executor=processor.futures_executor,
+                                              executor_args={
+                                                  'skipbadfiles':True,
+                                                  'schema': NanoAODSchema,
+                                                  'workers': 2,
+                                                  "retries": 6},
+                                              chunksize=Chunk[0])#, maxchunks=Chunk[1])
+        else:
+            chosen_exec = 'dask'
+            output = processor.run_uproot_job(filesets,
+                                              treename='Events',
+                                              processor_instance=Processor(),
+                                              executor=processor.dask_executor,
+                                              executor_args={
+                                                  'client': client,
+                                                  'skipbadfiles':True,
+                                                  'schema': NanoAODSchema, #BaseSchema
+                                                  'xrootdtimeout': 100,
+                                                  'retries': 6,
+                                              },
+                                              chunksize=Chunk[0])#, maxchunks=Chunk[1])
     
         elapsed = time.time() - tstart
         print("Processor finished. Time elapsed: ", elapsed)
-        outputs_unweighted[name] = output
         print("Saving the output histograms under: ", outname)
         util.save(output, outname)
-        outputs_unweighted[name] = output
     else:
         output = util.load(outname)
         print("Loaded histograms from: ", outname)
@@ -222,6 +262,15 @@ def main():
     
     if UsingDaskExecutor:
         client.close()
+        time.sleep(5)
+        if CERNCondorCluster or CoffeaCasaEnv:
+            cluster.close()
+    
+    output
+    
+    if UsingDaskExecutor:
+        client.close()
+        time.sleep(5)
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
@@ -238,6 +287,7 @@ def main():
     elif one_bin==True:
         ptbins = np.array([15, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
+        etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
         etabins = np.array([etabins[0], 0, etabins[-1]])
     else:
         ptbins = output['ptresponse'].axis('pt').edges()
@@ -261,37 +311,39 @@ def main():
     plt.rcParams['figure.subplot.left'] = 0.162
     plt.rcParams['figure.dpi'] = 150
     
-                
-    
         
     
-        
+    if combineTTbar:
+        ids = output[list(output.keys())[0]].axis('dataset').identifiers()
+        names = [idii.name for idii in ids  ]
     
-    combineTTbar = False
-    if combineTTbar==True:
-        N_evts_had = 41113000
-        N_evts_semilep = 48065000
-        N_evts_dilep = 41160000
+        output_comb = {}
     
-        N_evts = np.array([N_evts_had, N_evts_semilep, N_evts_dilep])
+        N = {}
+        for s in names:
+            N[s] = output['cutflow'][s+': all events']
+        N_av = sum(N.values())/3
     
-        N_av = (N_evts_had+N_evts_semilep+N_evts_dilep)/3
-    
-        semilepxsec = 0.108*3*0.337*2*2
-        dilepxsec = 0.108*3*0.108*3
-        hadxsec = 0.337*2*0.337*2
-    
-        xsec = np.array([hadxsec, semilepxsec, dilepxsec])
-        weights = N_evts/N_av*xsec
-    
-        # (N_evts/N_av*xsec).sum()
-    
-        add_tags = ['_LHEflav1_TTBAR-Had-JME', '_LHEflav1_TTBAR-JME', '_LHEflav1_TTBAR-Dilep-JME']
-        tag_fulls = [tag+addtag for addtag in add_tags]
-        outnames = ['out/CoffeaJERCOutputs'+tag_full+'.coffea' for tag_full in tag_fulls]
-    
-        outputs = [util.load(outname) for outname in outnames]
-        
+        for key in output.keys():
+            if key!='cutflow':
+                hist_comb = output[key].integrate('dataset', ids[0])
+                hist_comb.scale(find_xsec(names[0])*N[names[0]]/N_av)
+                for ii in range(1,len(ids)-1):
+                    hist2 = output[key].integrate('dataset', ids[ii])
+                    hist2.scale(find_xsec(ids[ii].name)*N[names[ii]]/N_av)
+                    hist_comb = hist_comb+hist2
+                output_comb[key] = hist_comb
+            else:
+                cut_keys = list(output[key].keys())
+                len_new_keys = len(cut_keys)//3
+                output_comb["cutflow"] = {}
+                for cut in range(len_new_keys):
+                    output_comb["cutflow"]["Inclusive"+cut_keys[cut][4:]] = (output[key][cut_keys[cut]]*find_xsec(names[0])*N[names[0]]/N_av +
+                                                                   output[key][cut_keys[cut+len_new_keys]]*find_xsec(names[1])*N[names[1]]/N_av +
+                                                                   output[key][cut_keys[cut+2*len_new_keys]]*find_xsec(names[2])*N[names[2]]/N_av 
+                                                                  )
+                    
+        output = output_comb
         tag_full = tag + '_LHEflav1_TTBAR-Inclusive-JME'
     
         
@@ -302,36 +354,26 @@ def main():
                 
             
     
-    combine_antiflavour = False
+    def get_median(yvals, bin_edges):
+        yvals_cumsum = np.cumsum(yvals)
+        N = np.sum(yvals)
+        med_bin = np.nonzero(yvals_cumsum>N/2)[0][0] if N>200 else 0
+        
+        median = bin_edges[med_bin] + (N/2 - yvals_cumsum[med_bin-1])/yvals[med_bin]*(bin_edges[med_bin+1]
+                                                                                     - bin_edges[med_bin])
+        return median
     
     import warnings
-    barable_samples = ['_b', '_c', '_s', 'ud_']
+    barable_samples = ['_b', '_c', '_s', '_u', '_d']
     
     def fit_responses(output, samp='_b'):
         warnings.filterwarnings('ignore')
         
-            
-        
-        if combineTTbar:
-            if combine_antiflavour and (samp in barable_samples):
-                response_hist = outputs[0]['ptresponse'+samp].copy() + outputs[0]['ptresponse'+samp+'bar'].copy()            
-            else:
-                response_hist = outputs[0]['ptresponse'+samp].copy()
-            response_hist.scale(weights[0])
-            for out, wg in zip(outputs[1:], weights[1:]):
-                if combine_antiflavour and (samp in barable_samples):
-                    response_hist2 = out['ptresponse'+samp].copy() + out['ptresponse'+samp+'bar'].copy()
-                else:
-                    response_hist2 = out['ptresponse'+samp].copy()
-                response_hist2.scale(wg)
-                response_hist.add(histo2)
+        if combine_antiflavour and (samp in barable_samples):
+            response_hist = output['ptresponse'+samp] + output['ptresponse'+samp+'bar']
         else:
-            if combine_antiflavour and (samp in barable_samples):
-                response_hist = output['ptresponse'+samp] + output['ptresponse'+samp+'bar']
-            else:
-                response_hist = output['ptresponse'+samp]
+            response_hist = output['ptresponse'+samp]
     
-        
         mean = np.zeros((jetpt_length, jeteta_length))
         medians = np.zeros((jetpt_length, jeteta_length))
         medianstds = np.zeros((jetpt_length, jeteta_length))
@@ -369,9 +411,10 @@ def main():
                 histoPl = response_hist.integrate('jeteta', etaBinPl).integrate('pt', ptBin)
                 histo = (histoMi+histoPl)
                     
-                yvals = histo.values()[('QCD',)][1:]  #[1:] to exclude the second peak for low pt
+                dataset_name = list(histo.values().keys())[0]
+                yvals = histo.values()[dataset_name][1:]  #[1:] to exclude the second peak for low pt
     
-                N = histo.integrate('ptresponse').values()[('QCD',)]-histo.values()[('QCD',)][0]
+                N = np.sum(yvals)
                 
                ####################### Calculate median and rms ############################
                 
@@ -463,6 +506,8 @@ def main():
         return [mean, meanvar, medians, medianstds] #width, 
         
     
+    np.array([1,2,3])*np.array([2,3,5])
+    
     def plot_corrections(mean, samp, meanstd):
         ### To ignore the points with 0 on y axis when setting the y axis limits
         mean_p = mean.copy()
@@ -471,34 +516,46 @@ def main():
         fig, ax = plt.subplots()
         start = np.searchsorted(ptbins_c, 20, side='left') #np.where(ptbins<=20)[0][-1]
         
-        ptbins_plot = ptbins_c[start:]
-        meanstd = meanstd[start:,:]
-        
         k2 = np.where(etabins_mod<=0)[0][-1]
         k4 = np.where(etabins_mod<=1.3)[0][-1]
         k6 = np.where(etabins_mod<=2.5)[0][-1]
         k8 = np.where(etabins_mod<=3.0)[0][-1]
+        lastbin = np.where(~ np.isnan(mean_p[:, k2]*mean_p[:, k4]*mean_p[:, k6]*mean_p[:, k8]))[0][-1]
         
-        plt.errorbar(ptbins_plot, mean_p[start:,k2], yerr=meanstd[:,k2], marker='o',
+        ptbins_plot = ptbins_c[start:lastbin]
+        meanstd = meanstd[start:lastbin,:]
+        
+        mean_p = mean_p[start:lastbin]
+        
+        plt.errorbar(ptbins_plot, mean_p[:,k2], yerr=meanstd[:,k2], marker='o',
                      linestyle="none", label=f'{etabins_mod[k2]}'+r'$<\eta<$'+f'{etabins_mod[k2+1]}')
-        plt.errorbar(ptbins_plot, mean_p[start:,k4], yerr=meanstd[:,k4], marker='o',
+        plt.errorbar(ptbins_plot, mean_p[:,k4], yerr=meanstd[:,k4], marker='o',
                  linestyle="none", label=f'{etabins_mod[k4]}'+r'$<\eta<$'+f'{etabins_mod[k4+1]}')
-        plt.errorbar(ptbins_plot, mean_p[start:,k6], yerr=meanstd[:,k6], marker='o',
+        plt.errorbar(ptbins_plot, mean_p[:,k6], yerr=meanstd[:,k6], marker='o',
                  linestyle="none", label=f'{etabins_mod[k6]}'+r'$<\eta<$'+f'{etabins_mod[k6+1]}')
-        plt.errorbar(ptbins_plot, mean_p[start:,k8], yerr=meanstd[:,k8], marker='o',
+        plt.errorbar(ptbins_plot, mean_p[:,k8], yerr=meanstd[:,k8], marker='o',
                  linestyle="none", label=f'{etabins_mod[k8]}'+r'$<\eta<$'+f'{etabins_mod[k8+1]}')
     
         ### Calculate resonable limits excluding the few points with insane errors
-        yerr_norm = np.concatenate([np.sqrt(meanvar[start:,[k2, k4, k6, k8]]) ])
-        y_norm = np.concatenate([mean_p[start:,[k2, k4, k6, k8]]])
+        yerr_norm = np.concatenate([meanstd[:,[k2, k4, k6, k8]] ])
+        y_norm = np.concatenate([mean_p[:,[k2, k4, k6, k8]]])
         norm_pos = (yerr_norm<0.02) &  (yerr_norm != np.inf) & (y_norm>-0.1)
-        ax.set_ylim(np.min((y_norm-yerr_norm)[norm_pos]) ,np.max((yerr_norm+y_norm)[norm_pos]))
+        
+        left_lim = np.min((y_norm-yerr_norm)[norm_pos])
+        right_lim = np.max((yerr_norm+y_norm)[norm_pos])
+        lim_pad = (right_lim - left_lim)/20
+        ax.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
         
         ax.set_xscale('log')
+        
+        
+        
+        good_xlims = ax.get_xlim()
         ax.set_xticks([20, 50, 100, 500, 1000, 5000])
+        ax.set_xlim(good_xlims)
         ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
         ax.set_xlabel(r'$p_T$ (GeV)');
-        ax.set_ylabel(r'mean response');
+        ax.set_ylabel(r'median response');
         ax.legend()
         if test_run:
             plt.savefig('test/fig/corr_vs_pt'+samp+tag_full+'_test.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
@@ -522,6 +579,7 @@ def main():
         k4 = np.where(ptbins<=40)[0][-1]
         k6 = np.where(ptbins<=150)[0][-1]
         k8 = np.where(ptbins<=400)[0][-1]
+        
         
         plt.errorbar(etabins_c, mean_p[k2,:], yerr=meanstd[k2], marker='o',
                      linestyle="none", label=f'{ptbins[k2]}'+r'$<p_t<$'+f'{ptbins[k2+1]}')
@@ -577,15 +635,15 @@ def main():
     medianstds = []
     
     combine_antiflavour = False
-    subsamples = ['', '_b', '_c', '_ud', '_s', '_g', '_bbar', '_cbar', '_udbar', '_sbar']
+    subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
         print('Fitting subsample: ', samp)
         if load_fit_res:
-            mean = read_data("Mean", samp)
-            meanvar = read_data("MeanVar", samp)
-            median = read_data("Mean", samp)
+            mean = read_data("Median", samp)
+            meanvar = read_data("MedianVar", samp)
+            median = read_data("Median", samp)
             medianstd = read_data("MedianStd", samp)
         else:
             mean, meanvar, median, medianstd = fit_responses(output, samp)
@@ -593,15 +651,14 @@ def main():
             medianstds.append(medianstd[0][0])
             for data, name in zip([mean, meanvar, median, medianstd],["Mean", "MeanVar", "Median", "MedianStd"]):
                 save_data(data, name, samp)
+                pass
                 
         meanstd = np.sqrt(meanvar)
                 
         if fine_etabins or one_bin:
             plot_corrections_eta(median, samp, medianstd)
         else:
-            plot_corrections(mean, samp, meanstd)
-    
-    
+            plot_corrections(median, samp, medianstd)
     
     print('-----'*10)
     print("All done. Congrats!")

@@ -1,5 +1,13 @@
 #CoffeaJERCProcessor.py
 
+import sys
+sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
+sys.path
+
+# from os import listdir
+# listdir('.')
+# listdir('./coffea')
+
 import scipy.stats as ss
 from coffea import hist, processor, nanoevents
 from coffea import util
@@ -8,6 +16,10 @@ import pandas as pd
 from coffea.jetmet_tools import JetCorrectionUncertainty # FactorizedJetCorrector
 from coffea.jetmet_tools import JECStack, CorrectedJetsFactory
 from coffea.lookup_tools import extractor
+
+from coffea.count_2d import count_2d
+# from coffea import some_test_func
+# some_test_func.test_func()
 
 
 
@@ -55,13 +67,15 @@ class Processor(processor.ProcessorABC):
         # jetphi_axis = hist.Bin("jetphi", r"Jet $\phi$", 50, -np.pi, np.pi)
 
         
-        subsamples = ['b', 'c', 'ud', 's', 'g', 'bbar', 'cbar', 'udbar', 'sbar']
+        subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar']
         self.subsamples = subsamples
         acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in subsamples}
         acc_dict['ptresponse']  = hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis)
         acc_dict['jetpt']       = hist.Hist("Counts", dataset_axis, jetpt_axis)
         acc_dict['jeteta']      = hist.Hist("Counts", dataset_axis, jeteta_axis)
-        acc_dict['cutflow']     = processor.defaultdict_accumulator(dict)
+        
+#         acc_dict['cutflow']     = processor.defaultdict_accumulator(dict)
+        acc_dict['cutflow']    = processor.defaultdict_accumulator(int)
 
         self._accumulator = processor.dict_accumulator(acc_dict)
         
@@ -160,64 +174,37 @@ class Processor(processor.ProcessorABC):
         ''' Algorithm of LHE_Flavour2:
         Cuts all the outgoing LHE particles that have pdgId as quarks (except top) and gluons.
         For each LHE particle finds the closest jet and gives the jet its flavour.
-        If a jet is marked by different LHE particles:
-         - if it is marked by 2 LHE particles give the jet a code = (flav1)*100+flav2
-         - if it is marked by 3 or more LHE particles, give it a code = 100.
+        If a jet is marked by two or more LHE particles: assign -999
         '''
 #         lhe_part_exists = True 
         if lhe_part_exists:
                 LHE_flavour_2 = ak.zeros_like(jets.hadronFlavour)
                 jet_shape2 = ak.num(jets.hadronFlavour)
 
+                ## have to work with flattened objects as awkwards doesn not allow to modify it's entries
                 LHE_flavour_np_2 = ak.flatten(LHE_flavour_2).to_numpy().copy()
 
-                LHEPart = events.LHEPart
+                LHEPart = selectedEvents.LHEPart
                 absLHEid = np.abs(LHEPart.pdgId)
                 LHE_outgoing = LHEPart[(LHEPart.status==1) & ((absLHEid < 6) | (absLHEid == 21))]
 
-                drs, [LHE_match, _] = LHE_outgoing.metric_table(jets, return_combinations=True, axis=1)
+                drs, [LHE_match, jets_match] = LHE_outgoing.metric_table(jets, return_combinations=True, axis=1)
 
-                # arms_dim = ak.argmin(drs, axis=2, keepdims=True )
-                arms = ak.argmin(drs, axis=2)
-                # aa = ak.flatten(arms_dim,axis=2)
+                arms = ak.argmin(drs, axis=2) ## for each event, for each LHE particle, the closest jet index
                 cums = np.cumsum(jet_shape2)[:-1]
                 cums = np.append(0,cums)
-                arms_flat = arms + cums
+                arms_flat = arms + cums ### positions of the matchet jets in the flattened list
                 arms_np = ak.flatten(arms_flat).to_numpy().data
-                # print("arms_np = ", arms_np)
                 LHE_match_flat = ak.flatten(LHE_match[:,:,:1].pdgId,axis=1)
-                LHE_flavour_np_2[arms_np[ak.num(LHE_match_flat)>0]] = ak.flatten(LHE_match_flat)
+                
+                aa = count_2d(arms, ak.ArrayBuilder())
+                aa_np = ak.flatten(aa).to_numpy()
 
+                LHE_flavour_np_2 = ak.flatten(LHE_flavour_2).to_numpy().copy()
+                LHE_flavour_np_2[arms_np[ak.num(LHE_match_flat)>0][aa_np==1]] = ak.flatten(LHE_match_flat)[aa_np==1]
+                ### Some LHE particles might point to the same LHE partons. Those are kept unmatched.
+                LHE_flavour_np_2[arms_np[ak.num(LHE_match_flat)>0][aa_np>1]] = -999 
 
-                flavlen = len(LHE_flavour_np_2)
-
-                # LHE_flavour_np_2
-
-                for jetii in range(max(jet_shape2)):
-                        clashing_ev = np.count_nonzero(jetii == arms, axis=1)
-                        #     if jetii ==1:
-                        #         print("cl ev = ", clashing_ev)
-                        clash_loc = cums[(clashing_ev>2)]+jetii
-                        # print("Checking ii = ", jetii, ", found closing locs = ", clash_loc)
-#                         if np.any(clash_loc>flavlen):
-#                                 loc = np.where(clash_loc>flavlen)
-#                                 clash_loc = clash_loc[:loc[0][0]]
-                        #         print("Changed to ", clash_loc)
-                        LHE_flavour_np_2[clash_loc] = 100
-                        
-                        clash_loc = cums[(clashing_ev==2 )]+jetii
-                        #     print("Checking ii = ", jetii, ", found closing locs = ", clash_loc)
-                        
-                        for ii in clash_loc:
-                                a = np.where(arms_np == ii)
-                                # print("a = ", a)
-                                aa = LHE_match_flat[a]
-                                # print("aa = ", aa)
-                                indx = aa[0]*100+aa[1]
-
-                        LHE_flavour_np_2[clash_loc] = indx
-
-#                 print("LHEFlavour = ", LHE_flavour_np_2.tolist())
                 jets["LHE_Flavour2"] = ak.unflatten(LHE_flavour_np_2, jet_shape2)
 
         ############ Jet selection ###########
@@ -273,8 +260,8 @@ class Processor(processor.ProcessorABC):
         sel_jets['pt_raw'] = (1 - sel_jets['rawFactor']) * sel_jets['pt']     #raw pt. pt before the corrects applied to data
         sel_jets['mass_raw'] = (1 - sel_jets['rawFactor']) * sel_jets['mass']
         sel_jets['pt_gen'] = ak.values_astype(ak.fill_none(sel_jets.matched_gen.pt, 0), np.float32)
-        sel_jets['rho'] = ak.broadcast_arrays(events.fixedGridRhoFastjetAll, sel_jets.pt)[0]
-        events_cache = events.caches[0]
+        sel_jets['rho'] = ak.broadcast_arrays(selectedEvents.fixedGridRhoFastjetAll, sel_jets.pt)[0]
+        events_cache = selectedEvents.caches[0]
 
         reco_jets = self.jet_factory.build(sel_jets, lazy_cache=events_cache)
         gen_jets = reco_jets.matched_gen
@@ -298,7 +285,7 @@ class Processor(processor.ProcessorABC):
                 jet_shape = ak.num(reco_jets.hadronFlavour)
                 LHE_flavour_np = ak.flatten(LHE_flavour).to_numpy()
 
-                LHEPart = events.LHEPart
+                LHEPart = selectedEvents.LHEPart
                 absLHEid = np.abs(LHEPart.pdgId)
                 LHE_outgoing = LHEPart[(LHEPart.status==1) & ((absLHEid < 6) | (absLHEid == 21))]
                 drs, [_, LHE_match] = reco_jets.metric_table(LHE_outgoing, return_combinations=True, axis=1)
@@ -368,11 +355,13 @@ class Processor(processor.ProcessorABC):
         masks = {}
         masks['b'] = ak.flatten((jet_flavour==5)).to_numpy( allow_missing=True)
         masks['c'] = ak.flatten((jet_flavour==4)).to_numpy( allow_missing=True)
-        masks['ud'] = ak.flatten((jet_flavour==1) | (jet_flavour==2)).to_numpy( allow_missing=True)
+        masks['d'] = ak.flatten(jet_flavour==2).to_numpy( allow_missing=True)
+        masks['u'] = ak.flatten(jet_flavour==1).to_numpy( allow_missing=True)
         masks['s'] = ak.flatten((jet_flavour==3) ).to_numpy( allow_missing=True)
         masks['bbar'] = ak.flatten((jet_flavour==-5)).to_numpy( allow_missing=True)
         masks['cbar'] = ak.flatten((jet_flavour==-4)).to_numpy( allow_missing=True)
-        masks['udbar'] = ak.flatten((jet_flavour==-1) | (jet_flavour==-2) ).to_numpy( allow_missing=True)
+        masks['ubar'] = ak.flatten(jet_flavour==-1).to_numpy( allow_missing=True)
+        masks['dbar'] = ak.flatten(jet_flavour==-2).to_numpy( allow_missing=True)
         masks['sbar'] = ak.flatten((jet_flavour==-3) ).to_numpy( allow_missing=True)
         masks['g'] = ak.flatten(jet_flavour==21).to_numpy( allow_missing=True)
 
