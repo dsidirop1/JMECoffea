@@ -34,19 +34,19 @@ def main():
     CERNCondorCluster = True
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = False     ### True if run only on one file
+    test_run          = True     ### True if run only on one file
     load_fit_res      = False
     
     fine_etabins      = False
     one_bin           = False
     
-    Nfiles = -1
+    Nfiles = 250
     
     tag = '_L5'
     
     exec('from CoffeaJERCProcessor'+tag+' import Processor') 
 #     add_tag = '_LHEflav1_TTBAR-Summer16'
-    add_tag = '_LHEflav1_TTBAR-JME' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
+    add_tag = 'LHEflav1_TTBAR-JME_250files' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -79,7 +79,7 @@ def main():
 #     xrootdstr = 'root://stormgf2.pi.infn.it:1094/'
 #     xrootdstr = 'root://cmsxrootd.fnal.gov/'
 #     xrootdstr = 'root://xrootd-cms.infn.it/'
-    xrootdstr = 'root://mover.pp.rl.ac.uk:1094/pnfs/pp.rl.ac.uk/data/cms/'
+#     xrootdstr = 'root://mover.pp.rl.ac.uk:1094/pnfs/pp.rl.ac.uk/data/cms/'
     
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
@@ -91,6 +91,7 @@ def main():
 #     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
 #     dataset = 'fileNames/fileNames_TT_Summer16cFlip.txt'
 #     dataset = 'fileNames/fileNames_TT_Summer16.txt'
+#     dataset = 'fileNames/fileNames_DYJets.txt'
     
     with open(dataset) as f:
         rootfiles = f.read().split()
@@ -99,13 +100,13 @@ def main():
 #     fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer20UL18NanoAODv9/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/230000/0E7E5FE2-DD10-CB4C-A794-865FF5E7E505.root']
     fileslist = fileslist[:Nfiles] # if add_tag=='QCD' else fileslist # :20 to skim the events
     
-    dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano_redi.txt'
-#     dataset = 'fileNames/fileNames_TT_Summer16cFlip_redi.txt'
+#     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano_redi.txt'
+# #     dataset = 'fileNames/fileNames_TT_Summer16cFlip_redi.txt'
     
-    #### dataset with files already with redirectors of the corresponding tiers
-    with open(dataset) as f:
-        rootfiles = f.read().split()
-    fileslist = rootfiles[:Nfiles]
+#     #### dataset with files already with redirectors of the corresponding tiers
+#     with open(dataset) as f:
+#         rootfiles = f.read().split()
+#     fileslist = rootfiles[:Nfiles]
     
 #     fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/8D4B8C15-99B0-044A-9477-3864B1B2206B.root', #good file
 #              'root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/55E72333-8846-D040-90FF-266FCA3EF67B.root', #bad file
@@ -187,9 +188,9 @@ def main():
     
             cluster = CernCluster(
                 env_extra=env_extra,
-                cores = 1,
-                memory = '4300MB',
-                disk = '2000MB',
+                cores = 4,
+                memory = '5000MB',
+                disk = '4000MB',
                 death_timeout = '60',
                 lcg = True,
                 nanny = False,
@@ -206,7 +207,7 @@ def main():
 #                                             ]
                 },
             )
-            cluster.adapt(minimum=2, maximum=100)
+            cluster.adapt(minimum=2, maximum=20)
             cluster.scale(8)
             client = Client(cluster)
         
@@ -220,8 +221,10 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    Chunk = [10000, 5] # [chunksize, maxchunks]
+    Chunk = [10000] # [chunksize, maxchunks]
     
+    import warnings
+    warnings.filterwarnings('ignore')
     if not load_preexisting:
         if not UsingDaskExecutor:
             chosen_exec = 'futures'
@@ -259,6 +262,7 @@ def main():
         output = util.load(outname)
         print("Loaded histograms from: ", outname)
        
+    warnings.filterwarnings('default')
     
     if UsingDaskExecutor:
         client.close()
