@@ -31,7 +31,7 @@ def main():
     from CoffeaJERCProcessor_L5 import Processor
     
     UsingDaskExecutor = True
-    CERNCondorCluster = True
+    CERNCondorCluster = False
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = True     ### True if run only on one file
@@ -188,8 +188,8 @@ def main():
     
             cluster = CernCluster(
                 env_extra=env_extra,
-                cores = 4,
-                memory = '5000MB',
+                cores = 1,
+                memory = '4000MB',
                 disk = '4000MB',
                 death_timeout = '60',
                 lcg = True,
@@ -221,7 +221,7 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    Chunk = [10000] # [chunksize, maxchunks]
+    Chunk = [10000, 5] # [chunksize, maxchunks]
     
     import warnings
     warnings.filterwarnings('ignore')
