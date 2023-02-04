@@ -4,10 +4,6 @@ def main():
     c = ConfigManager()
     c.update('notebook', {"CodeCell": {"cm_config": {"autoCloseBrackets": False}}})
     
-            
-    
-        
-    
     import bokeh
     import time
     import copy
@@ -23,6 +19,7 @@ def main():
     import itertools
     import pandas as pd
     from numpy.random import RandomState
+    import importlib
     
     from dask.distributed import Client
     import inspect
@@ -35,7 +32,7 @@ def main():
     UsingDaskExecutor = True
     CERNCondorCluster = False
     CoffeaCasaEnv     = False
-    load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
+    load_preexisting  = True    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = True   ### True if run only on one file
     load_fit_res      = False   ### True if don't repeat the response fits
     
@@ -46,34 +43,22 @@ def main():
     
     tag = '_L5'                 ### L5 or L23, but L23 not supported since ages
     
-    add_tag = '_LHEflav1_TTBAR-JME'
+    add_tag = '_DY-JME'
     
-    xrootdstr = 'root://cms-xrd-global.cern.ch//'
+    xrootdstr = 'root://xrootd-cms.infn.it/'
     
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
         
     prixydir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
         
-    dataset = 'fileNames/fileNames_TTToSemi20UL18.txt'
-#     dataset = 'fileNames/fileNames_QCD20UL18.txt'
-#     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
-#     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
-#     dataset = 'fileNames/fileNames_TT_Summer16cFlip.txt'
-#     dataset = 'fileNames/fileNames_DYJets.txt'
+    dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
     
     with open(dataset) as f:
         rootfiles = f.read().split()
     
-    import importlib
     Processor = importlib.import_module('CoffeaJERCProcessor'+tag).Processor
-#     exec('from CoffeaJERCProcessor'+tag+' import Processor')
-    Processor()
     
-#     print(5)
-#     exec('from CoffeaJERCProcessor'+tag+' import Processor')
-# #     from CoffeaJERCProcessor_L5 import Processor
-#     Processor()
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -140,7 +125,6 @@ def main():
                 rootfiles = f.read().split()
             fileslist = [xrootdstr + file for file in rootfiles]
             fileslist = fileslist[:Nfiles]
-            fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer20UL18NanoAODv9/DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2820000/7F3155C8-D127-7D44-947B-000D5CE02C8C.root']
             xsec = find_xsec(data_name)
             filesets[ftag] = {"files": fileslist, "metadata": {"xsec": xsec}}
     else:
@@ -157,13 +141,19 @@ def main():
     os.environ['X509_VOMS_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/vomsdir'
     os.environ['X509_USER_CERT'] = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
+    import uproot
+    
+    ff = uproot.open(fileslist[0])
+    ff.keys()
+    ff.close()
+    
     if(UsingDaskExecutor and CoffeaCasaEnv):
         client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")
         client.upload_file('CoffeaJERCProcessor.py')
     
     env_extra = [
                 'export XRD_RUNFORKHANDLER=1',
-                f'export X509_USER_PROXY='+prixydir,
+                f'export X509_USER_PROXY=/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem',
                 f'export X509_CERT_DIR={os.environ["X509_CERT_DIR"]}',
             ]
     
@@ -172,6 +162,7 @@ def main():
         if not CERNCondorCluster:
             client = Client()
             client.get_versions(check=True)
+    
         else:
             from dask_lxplus import CernCluster
             import socket
@@ -253,11 +244,7 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
-    filesets
-    
     output
-    
-    output['ptresponse_b'].values()[('QCD',)].sum()
     
     if UsingDaskExecutor:
         client.close()
@@ -268,7 +255,6 @@ def main():
     def gauss(x, *p):
         A, mu, sigma = p
         return A*np.exp(-(x-mu)**2/(2.*sigma**2))
-    
     
     f_xvals = np.linspace(0,5,5001)
     
@@ -283,7 +269,6 @@ def main():
         etabins = np.array([etabins[0], 0, etabins[-1]])
     else:
         ptbins = output['ptresponse'].axis('pt').edges()
-        ptbins = ptbins[2:] #because there is a pt cut on pt gen and no point of fitting and plotting below that
         ptbins_c = output['ptresponse'].axis('pt').centers()
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
     
@@ -376,15 +361,13 @@ def main():
         width = np.zeros((jetpt_length, jeteta_length))
         meanvar = np.zeros((jetpt_length, jeteta_length))
         
+        
         N_converge = 0
         N_not_converge = 0
     
-        FitFigDir = 'fig/responses'+tag_full+'/response_pt_eta'+samp+tag_full
+        FitFigDir = 'fig/responses/responses'+tag_full+'/response_pt_eta'+samp+tag_full
         if saveplots and not os.path.exists('fig/responses'+tag_full):
-            os.mkdir('fig/responses'+tag_full)
-            
-        if not os.path.exists(FitFigDir):
-            os.mkdir(FitFigDir)
+            os.mkdir('fig/responses/responses'+tag_full)
             
         xvals = response_hist.axis('ptresponse').centers()[1:] #[1:] to exclude the second peak for low pt
         f_xvals = np.linspace(0,max(xvals),5001)
@@ -507,8 +490,6 @@ def main():
         
         return [mean, meanvar, medians, medianstds] #width, 
         
-    
-    np.array([1,2,3])*np.array([2,3,5])
     
     def plot_corrections(mean, samp, meanstd):
         ### To ignore the points with 0 on y axis when setting the y axis limits
@@ -636,8 +617,8 @@ def main():
     medians = []
     medianstds = []
     
-    combine_antiflavour = True   ### combine quark and antiquark flavour in one bin
-    subsamples = ['_b', '_c', '_d', '_u', '_s', '_g', '']
+    combine_antiflavour = False
+    subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
@@ -661,13 +642,6 @@ def main():
             plot_corrections_eta(median, samp, medianstd)
         else:
             plot_corrections(median, samp, medianstd)
-    
-    medianstds
-    
-    medians
-    
-                
-                
     
     print('-----'*10)
     print("All done. Congrats!")
