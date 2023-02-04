@@ -1,4 +1,9 @@
-#CoffeaJERCProcessor.py
+#CoffeaJERCProcessor_L5.py
+
+from memory_profiler import profile
+# from guppy import hpy
+# h = hpy()
+# print(h.heap())
 
 import sys
 sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
@@ -8,7 +13,7 @@ sys.path
 # listdir('.')
 # listdir('./coffea')
 
-import scipy.stats as ss
+# import scipy.stats as ss
 from coffea import hist, processor, nanoevents
 from coffea import util
 import numpy as np
@@ -141,6 +146,7 @@ class Processor(processor.ProcessorABC):
     def accumulator(self):
         return self._accumulator
 
+    @profile
     def process(self, events):
         
         output = self.accumulator.identity()
@@ -391,6 +397,8 @@ class Processor(processor.ProcessorABC):
                output['ptresponse_'+sample].fill(dataset=dataset, pt=gen_jetpts[sample],
                                     jeteta=gen_jetetas[sample],
                                     ptresponse=ptresponses[sample])
+            
+        
         
         return output
 
