@@ -4,6 +4,10 @@ def main():
     c = ConfigManager()
     c.update('notebook', {"CodeCell": {"cm_config": {"autoCloseBrackets": False}}})
     
+            
+    
+        
+    
     import bokeh
     import time
     import copy
@@ -28,25 +32,48 @@ def main():
     from pltStyle import pltStyle
     import os
     
-    from CoffeaJERCProcessor_L5 import Processor
-    
     UsingDaskExecutor = True
     CERNCondorCluster = False
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = True     ### True if run only on one file
-    load_fit_res      = False
+    test_run          = True   ### True if run only on one file
+    load_fit_res      = False   ### True if don't repeat the response fits
     
-    fine_etabins      = False
-    one_bin           = False
+    fine_etabins      = False   ### Don't merge eta bins together when fitting responses. Preprocessing always done in many bins
+    one_bin           = False   ### Unite all eta and pt bins in one
     
-    Nfiles = 250
+    Nfiles = 100                 ### -1 for all files
     
-    tag = '_L5'
+    tag = '_L5'                 ### L5 or L23, but L23 not supported since ages
     
-    exec('from CoffeaJERCProcessor'+tag+' import Processor') 
-#     add_tag = '_LHEflav1_TTBAR-Summer16'
-    add_tag = 'LHEflav1_TTBAR-JME_250files' #'_Herwig-TTBAR' # '_TTBAR' #'_QCD' # '_testing_19UL18' # '' #fine_etaBins
+    add_tag = '_LHEflav1_TTBAR-JME'
+    
+    xrootdstr = 'root://cms-xrd-global.cern.ch//'
+    
+    if CoffeaCasaEnv:
+        xrootdstr = 'root://xcache/'
+        
+    prixydir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
+        
+    dataset = 'fileNames/fileNames_TTToSemi20UL18.txt'
+#     dataset = 'fileNames/fileNames_QCD20UL18.txt'
+#     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
+#     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
+#     dataset = 'fileNames/fileNames_TT_Summer16cFlip.txt'
+#     dataset = 'fileNames/fileNames_DYJets.txt'
+    
+    with open(dataset) as f:
+        rootfiles = f.read().split()
+    
+    import importlib
+    Processor = importlib.import_module('CoffeaJERCProcessor'+tag).Processor
+#     exec('from CoffeaJERCProcessor'+tag+' import Processor')
+    Processor()
+    
+#     print(5)
+#     exec('from CoffeaJERCProcessor'+tag+' import Processor')
+# #     from CoffeaJERCProcessor_L5 import Processor
+#     Processor()
     tag_full = tag+add_tag
     
     outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
@@ -67,6 +94,10 @@ def main():
     if not os.path.exists("out_txt"):
         os.mkdir("out_txt")
         
+    if not os.path.exists("fig"):
+        os.mkdir("fig/")
+        os.mkdir("fig/responses/")
+        
     if test_run and not os.path.exists("test"):
         os.mkdir("test/")
         os.mkdir("test/out_txt")
@@ -74,46 +105,10 @@ def main():
         
     if test_run:
         Nfiles = 1
-    
-    xrootdstr = 'root://cms-xrd-global.cern.ch//'
-#     xrootdstr = 'root://stormgf2.pi.infn.it:1094/'
-#     xrootdstr = 'root://cmsxrootd.fnal.gov/'
-#     xrootdstr = 'root://xrootd-cms.infn.it/'
-#     xrootdstr = 'root://mover.pp.rl.ac.uk:1094/pnfs/pp.rl.ac.uk/data/cms/'
-    
-    if CoffeaCasaEnv:
-        xrootdstr = 'root://xcache/'
         
-    dataset = 'fileNames/fileNames_TTToSemi20UL18.txt'
-    dataset = 'fileNames/fileNames_QCD20UL18.txt'
-    dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
-    dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
-#     dataset = 'fileNames/fileNames_Herwig_20UL18_JMENano.txt'
-#     dataset = 'fileNames/fileNames_TT_Summer16cFlip.txt'
-#     dataset = 'fileNames/fileNames_TT_Summer16.txt'
-#     dataset = 'fileNames/fileNames_DYJets.txt'
-    
-    with open(dataset) as f:
-        rootfiles = f.read().split()
-    
     fileslist = [xrootdstr + file for file in rootfiles]
-#     fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer20UL18NanoAODv9/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/230000/0E7E5FE2-DD10-CB4C-A794-865FF5E7E505.root']
     fileslist = fileslist[:Nfiles] # if add_tag=='QCD' else fileslist # :20 to skim the events
-    
-#     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano_redi.txt'
-# #     dataset = 'fileNames/fileNames_TT_Summer16cFlip_redi.txt'
-    
-#     #### dataset with files already with redirectors of the corresponding tiers
-#     with open(dataset) as f:
-#         rootfiles = f.read().split()
-#     fileslist = rootfiles[:Nfiles]
-    
-#     fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/8D4B8C15-99B0-044A-9477-3864B1B2206B.root', #good file
-#              'root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/55E72333-8846-D040-90FF-266FCA3EF67B.root', #bad file
-#                  'root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/065A2F01-2963-C14D-96E2-50282818F6DD.root',
-# #              'root://grid-dcache.physik.rwth-aachen.de:1094////store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/E6694A4B-483C-BB42-AC66-187B1FE69CCF.root' #bad file2
-#             ] 
-    
+        
     print(f'Runing on dataset {dataset}\n Number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}')
     
     def find_xsec(key):
@@ -145,6 +140,7 @@ def main():
                 rootfiles = f.read().split()
             fileslist = [xrootdstr + file for file in rootfiles]
             fileslist = fileslist[:Nfiles]
+            fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer20UL18NanoAODv9/DYJetsToLL_M-50_TuneCP5_13TeV-amcatnloFXFX-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2820000/7F3155C8-D127-7D44-947B-000D5CE02C8C.root']
             xsec = find_xsec(data_name)
             filesets[ftag] = {"files": fileslist, "metadata": {"xsec": xsec}}
     else:
@@ -161,19 +157,13 @@ def main():
     os.environ['X509_VOMS_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/vomsdir'
     os.environ['X509_USER_CERT'] = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
-    import uproot
-    
-    ff = uproot.open(fileslist[0])
-    ff.keys()
-    ff.close()
-    
     if(UsingDaskExecutor and CoffeaCasaEnv):
         client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")
         client.upload_file('CoffeaJERCProcessor.py')
     
     env_extra = [
                 'export XRD_RUNFORKHANDLER=1',
-                f'export X509_USER_PROXY=/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem',
+                f'export X509_USER_PROXY='+prixydir,
                 f'export X509_CERT_DIR={os.environ["X509_CERT_DIR"]}',
             ]
     
@@ -181,16 +171,16 @@ def main():
         from dask.distributed import Client 
         if not CERNCondorCluster:
             client = Client()
-    
+            client.get_versions(check=True)
         else:
             from dask_lxplus import CernCluster
             import socket
     
             cluster = CernCluster(
                 env_extra=env_extra,
-                cores = 1,
+                cores = 4,
                 memory = '4000MB',
-                disk = '4000MB',
+                disk = '2000MB',
                 death_timeout = '60',
                 lcg = True,
                 nanny = False,
@@ -202,12 +192,10 @@ def main():
                 },
                 job_extra = {
                     'MY.JobFlavour': '"longlunch"',
-#                     'MY.JobFlavour': '"espresso"',
-                    'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/coffea/count_2d.py,/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/coffea/processor/executor.py',
-#                                             ]
+                    'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
                 },
             )
-            cluster.adapt(minimum=2, maximum=20)
+            cluster.adapt(minimum=2, maximum=50)
             cluster.scale(8)
             client = Client(cluster)
         
@@ -223,21 +211,18 @@ def main():
     prng = RandomState(seed)
     Chunk = [10000, 5] # [chunksize, maxchunks]
     
-    import warnings
-    warnings.filterwarnings('ignore')
     if not load_preexisting:
         if not UsingDaskExecutor:
             chosen_exec = 'futures'
-            output = processor.run_uproot_job({name:files},
+            output = processor.run_uproot_job({'QCD':filesets},
                                               treename='Events',
                                               processor_instance=Processor(),
                                               executor=processor.iterative_executor,
         #                                        executor=processor.futures_executor,
                                               executor_args={
                                                   'skipbadfiles':True,
-                                                  'schema': NanoAODSchema,
-                                                  'workers': 2,
-                                                  "retries": 6},
+                                                  'schema': NanoAODSchema, #BaseSchema
+                                                  'workers': 2},
                                               chunksize=Chunk[0])#, maxchunks=Chunk[1])
         else:
             chosen_exec = 'dask'
@@ -249,8 +234,8 @@ def main():
                                                   'client': client,
                                                   'skipbadfiles':True,
                                                   'schema': NanoAODSchema, #BaseSchema
-                                                  'xrootdtimeout': 100,
-                                                  'retries': 6,
+                                                  'xrootdtimeout': 60,
+                                                  'retries': 2,
                                               },
                                               chunksize=Chunk[0])#, maxchunks=Chunk[1])
     
@@ -261,8 +246,6 @@ def main():
     else:
         output = util.load(outname)
         print("Loaded histograms from: ", outname)
-       
-    warnings.filterwarnings('default')
     
     if UsingDaskExecutor:
         client.close()
@@ -270,7 +253,11 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
+    filesets
+    
     output
+    
+    output['ptresponse_b'].values()[('QCD',)].sum()
     
     if UsingDaskExecutor:
         client.close()
@@ -281,6 +268,7 @@ def main():
     def gauss(x, *p):
         A, mu, sigma = p
         return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+    
     
     f_xvals = np.linspace(0,5,5001)
     
@@ -295,6 +283,7 @@ def main():
         etabins = np.array([etabins[0], 0, etabins[-1]])
     else:
         ptbins = output['ptresponse'].axis('pt').edges()
+        ptbins = ptbins[2:] #because there is a pt cut on pt gen and no point of fitting and plotting below that
         ptbins_c = output['ptresponse'].axis('pt').centers()
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
     
@@ -372,6 +361,9 @@ def main():
     
     def fit_responses(output, samp='_b'):
         warnings.filterwarnings('ignore')
+        saveplots = False
+        if test_run or fine_etabins:
+            saveplots = False
         
         if combine_antiflavour and (samp in barable_samples):
             response_hist = output['ptresponse'+samp] + output['ptresponse'+samp+'bar']
@@ -387,7 +379,10 @@ def main():
         N_converge = 0
         N_not_converge = 0
     
-        FitFigDir = 'fig/response_pt_eta'+samp+tag_full
+        FitFigDir = 'fig/responses'+tag_full+'/response_pt_eta'+samp+tag_full
+        if saveplots and not os.path.exists('fig/responses'+tag_full):
+            os.mkdir('fig/responses'+tag_full)
+            
         if not os.path.exists(FitFigDir):
             os.mkdir(FitFigDir)
             
@@ -484,7 +479,8 @@ def main():
     
        ####################### Plotting ############################
     
-            if not test_run and (not fine_etabins) and True:
+            
+                if  saveplots:
                     histo = histo.rebin('ptresponse', plot_response_axis)
     
                     fig, ax2 = plt.subplots();
@@ -492,7 +488,7 @@ def main():
                                 fill_opts={'alpha': .5, 'edgecolor': (0,0,0,0.3), 'linewidth': 1.4})
                     # ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
                     ax2.plot(f_xvals, fgaus2, label='Gaus',linewidth=1.8)
-                    ax2.set_xlabel("Response ($E_{RECO}/E_{GEN}$)")
+                    ax2.set_xlabel("Response ($p_{T,reco}/p_{T,ptcl}$)")
                     ax2.set_xlim(plot_pt_edges[[0,-1]])
                     h = ax2.get_ylim()[1]/1.05
                     plt.text(0.03,0.95*h,r'Mean {0:0.3f}$\pm${1:0.3f}'.format(p2[1], np.sqrt(arr[1,1])))
@@ -502,6 +498,8 @@ def main():
                     plt.text(0.03,0.66*h,r'N data = {0:0.3g}'.format(N))
                     ax2.legend();
     
+                    plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
+                    plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
                     plt.close();                
     
         print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
@@ -638,8 +636,8 @@ def main():
     medians = []
     medianstds = []
     
-    combine_antiflavour = False
-    subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
+    combine_antiflavour = True   ### combine quark and antiquark flavour in one bin
+    subsamples = ['_b', '_c', '_d', '_u', '_s', '_g', '']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
@@ -663,6 +661,13 @@ def main():
             plot_corrections_eta(median, samp, medianstd)
         else:
             plot_corrections(median, samp, medianstd)
+    
+    medianstds
+    
+    medians
+    
+                
+                
     
     print('-----'*10)
     print("All done. Congrats!")
