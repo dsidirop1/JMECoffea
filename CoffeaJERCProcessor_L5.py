@@ -14,7 +14,7 @@ sys.path
 # listdir('./coffea')
 
 # import scipy.stats as ss
-from coffea import hist, processor, nanoevents
+from coffea import processor, nanoevents
 from coffea import util
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ from coffea.jetmet_tools import JECStack, CorrectedJetsFactory
 from coffea.lookup_tools import extractor
 
 from coffea.count_2d import count_2d
+import hist
 # from coffea import some_test_func
 # some_test_func.test_func()
 
@@ -62,27 +63,9 @@ class Processor(processor.ProcessorABC):
     def __init__(self):
         
         
-        dataset_axis = hist.Cat("dataset", "Primary dataset")
-        # cats_axis = hist.Cat("anacat", "Analysis Category")
-       
-        jetpt_axis = hist.Bin("pt", r"$p_T$", ptbins)
-        ptresponse_axis = hist.Bin("ptresponse", "RECO / GEN response", 100, 0, 2.5)
-        # jetmass_axis = hist.Bin("jetmass", r"Jet $m$ [GeV]", 50, 0, 500)
-        jeteta_axis = hist.Bin("jeteta", r"Jet $\eta$", etabins)
-        # jetphi_axis = hist.Bin("jetphi", r"Jet $\phi$", 50, -np.pi, np.pi)
+#         acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in subsamples}
 
-        
-        subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar']
-        self.subsamples = subsamples
-        acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in subsamples}
-        acc_dict['ptresponse']  = hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis)
-        acc_dict['jetpt']       = hist.Hist("Counts", dataset_axis, jetpt_axis)
-        acc_dict['jeteta']      = hist.Hist("Counts", dataset_axis, jeteta_axis)
-        
-#         acc_dict['cutflow']     = processor.defaultdict_accumulator(dict)
-        acc_dict['cutflow']    = processor.defaultdict_accumulator(int)
-
-        self._accumulator = processor.dict_accumulator(acc_dict)
+#         self._accumulator = acc_dict
         
         
         ext = extractor()
@@ -149,23 +132,38 @@ class Processor(processor.ProcessorABC):
     @profile
     def process(self, events):
         
-        output = self.accumulator.identity()
+        subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar']
+        flavour_axis = hist.axis.StrCategory(subsamples, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of subsamples. See, https://github.com/CoffeaTeam/coffea/discussions/705
+        pt_gen_axis = hist.axis.Variable(ptbins, name="pt_gen", overflow=True, underflow=True, label=r"$p_{T,gen}$")
+#         pt_reco_axis = hist.axis.Variable(ptbins, name="pt_reco", overflow=True, underflow=True, label=r"$p_{T,reco}$")
+        ptresponse_axis = hist.axis.Regular( 100, 0, 2.5, overflow=True, underflow=True, name="ptresponse", label="RECO / GEN response")
+        jeteta_axis = hist.axis.Variable(etabins, name="jeteta", label=r"Jet $\eta$")
+
+        self.subsamples = subsamples
+        
+        output = {}
+        output['ptresponse'] = hist.Hist(flavour_axis,
+                                            pt_gen_axis, pt_reco_axis, ptresponse_axis, jeteta_axis,
+                                            storage="weight", name="Counts")
+        
+        cutflow_axis = hist.axis.StrCategory([], growth=True, name="cutflow", label="Cutflow Scenarios")
+        output['cutflow'] = hist.Hist(cutflow_axis, storage="weight", label="Counts")
 
         dataset = events.metadata['dataset']
     
         # Event Cuts
         # apply npv cuts
-        output['cutflow'][dataset+': all events'] = len(events)
+        output['cutflow'].fill(cutflow=np.repeat('all_events', len(events)))
         
         npvCut = (events.PV.npvsGood > 0)
         pvzCut = (np.abs(events.PV.z) < 24)
         rxyCut = (np.sqrt(events.PV.x*events.PV.x + events.PV.y*events.PV.y) < 2)
         
         selectedEvents = events[npvCut & pvzCut & rxyCut]
-
+        output['cutflow'].fill(cutflow=np.repeat('selected_events', len(selectedEvents)))
         # get GenJets and Jets
         jets = selectedEvents.Jet
-        output['cutflow'][dataset+': all jets'] = ak.sum(ak.num(jets))
+        output['cutflow'].fill(cutflow=np.repeat('all_jets', ak.sum(ak.num(jets))))
         
         lhe_part_exists = False
 #         try:
@@ -222,7 +220,7 @@ class Processor(processor.ProcessorABC):
         jet_mask = jet_gen_match_mask  & dressed_electron_mask & dressed_muon_mask
             
         selected_jets = jets[jet_mask]
-        output['cutflow'][dataset+': gen matched + no dressed lep'] = ak.sum(ak.num(selected_jets))
+        output['cutflow'].fill(cutflow=np.repeat('gen_matched+no_dressed_lep', ak.sum(ak.num(selected_jets))))
 
 
         jet_pt_mask = selected_jets.matched_gen.pt>20
@@ -233,7 +231,8 @@ class Processor(processor.ProcessorABC):
         jet_pt_mask = ak.unflatten(jet_pt_mask_np.data, jet_pt_mask_shape)
         sel_jets = selected_jets[jet_pt_mask]
         
-        output['cutflow'][dataset+': + jetpt>20'] = ak.sum(ak.num(sel_jets))
+                               
+        output['cutflow'].fill(cutflow=np.repeat('jetpt>20', ak.sum(ak.num(sel_jets))))
         
         
                 # Cut on overlapping jets
@@ -241,7 +240,7 @@ class Processor(processor.ProcessorABC):
         jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
         sel_jets = sel_jets[jet_iso_mask]
         
-        output['cutflow'][dataset+': iso jets'] = ak.sum(ak.num(sel_jets))
+        output['cutflow'].fill(cutflow=np.repeat('iso jets', ak.sum(ak.num(sel_jets))))
 
         # print("jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_mask")
         
@@ -374,6 +373,7 @@ class Processor(processor.ProcessorABC):
         ptresponses     = { sample: ptresponse_np[masks[sample]]        for sample in subsamples }
         gen_jetpts      = { sample: gen_jetpt[masks[sample]]            for sample in subsamples }
         gen_jetetas     = { sample: gen_jeteta[masks[sample]]           for sample in subsamples }
+        jetpts          = { sample: jetpt[masks[sample]]                for sample in subsamples }
 
         # print("Try to np:")
         # ak.flatten(gen_jetpt).to_numpy()
@@ -382,24 +382,19 @@ class Processor(processor.ProcessorABC):
         # print("Before filling:")
 
         ########### Filling of the histograms ###############
-
-        output['jetpt'].fill(dataset = dataset, 
-                        pt = gen_jetpt)
-
-        output['jeteta'].fill(dataset = dataset, 
-                        jeteta = jeteta)
         
-        output['ptresponse'].fill(dataset=dataset, pt=gen_jetpt,
+        output['ptresponse'].fill(jet_flav='', pt_gen=gen_jetpt,
+                                                   pt_reco=jetpt,
                                                    jeteta=gen_jeteta,
                                                    ptresponse=ptresponse_np)
   
         for sample in subsamples:
-               output['ptresponse_'+sample].fill(dataset=dataset, pt=gen_jetpts[sample],
+               output['ptresponse'].fill(jet_flav=sample, pt_gen=gen_jetpts[sample],
+                                    pt_reco=jetpts[sample],
                                     jeteta=gen_jetetas[sample],
                                     ptresponse=ptresponses[sample])
             
-        
-        
+
         return output
 
     def postprocess(self, accumulator):
