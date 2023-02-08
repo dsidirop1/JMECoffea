@@ -1,3 +1,6 @@
+### CoffeaJERC-Andris.py
+### File automatically converted using ConvertJupyterToPy.ipynb from CoffeaJERC-Andris.ipynb
+### No comments or formatting is preserved by the transfer
 def main():
     
     from notebook.services.config import ConfigManager
@@ -9,7 +12,7 @@ def main():
     import copy
     import scipy.stats as ss
     from scipy.optimize import curve_fit
-    from coffea import hist, processor, nanoevents, util
+    from coffea import processor, nanoevents, util
     from coffea.nanoevents.methods import candidate
     from coffea.nanoevents import NanoAODSchema, BaseSchema
     
@@ -25,6 +28,7 @@ def main():
     import inspect
     import matplotlib.pyplot as plt
     import matplotlib as mpl
+    import hist
     
     from pltStyle import pltStyle
     import os
@@ -32,7 +36,7 @@ def main():
     UsingDaskExecutor = True
     CERNCondorCluster = False
     CoffeaCasaEnv     = False
-    load_preexisting  = True    ### True if don't repeat the processing of files and use preexisting JER from output
+    load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = True   ### True if run only on one file
     load_fit_res      = False   ### True if don't repeat the response fits
     
@@ -43,7 +47,7 @@ def main():
     
     tag = '_L5'                 ### L5 or L23, but L23 not supported since ages
     
-    add_tag = '_DY-JME'
+    add_tag = '_LHEflav1_TTBAR-JME'
     
     xrootdstr = 'root://xrootd-cms.infn.it/'
     
@@ -205,7 +209,7 @@ def main():
     if not load_preexisting:
         if not UsingDaskExecutor:
             chosen_exec = 'futures'
-            output = processor.run_uproot_job({'QCD':filesets},
+            output = processor.run_uproot_job(filesets,
                                               treename='Events',
                                               processor_instance=Processor(),
                                               executor=processor.iterative_executor,
@@ -244,8 +248,6 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
-    output
-    
     if UsingDaskExecutor:
         client.close()
         time.sleep(5)
@@ -256,20 +258,18 @@ def main():
         A, mu, sigma = p
         return A*np.exp(-(x-mu)**2/(2.*sigma**2))
     
-    f_xvals = np.linspace(0,5,5001)
-    
     if fine_etabins==True:
         ptbins = np.array([15, 40, 150, 400, 4000, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-        etabins = output['ptresponse'].axis('jeteta').edges()
+        etabins = output['ptresponse'].axes["jeteta"].edges #output['ptresponse'].axis('jeteta').edges()
     elif one_bin==True:
         ptbins = np.array([15, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
         etabins = np.array([etabins[0], 0, etabins[-1]])
     else:
-        ptbins = output['ptresponse'].axis('pt').edges()
-        ptbins_c = output['ptresponse'].axis('pt').centers()
+        ptbins = output['ptresponse'].axes["pt_gen"].edges 
+        ptbins_c = output['ptresponse'].axes['pt_gen'].centers
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
     
         
@@ -279,17 +279,14 @@ def main():
     etabins_mod = etabins[(len(etabins)-1)//2:]
     etabins_c = (etabins_mod[:-1]+etabins_mod[1:])/2 #output['ptresponse'].axis('jeteta').centers()
     
-    ptresp_edd = output['ptresponse'].axis('ptresponse').edges()
+    ptresp_edd = output['ptresponse'].axes['ptresponse'].edges
     plot_pt_edges = ptresp_edd[0:np.nonzero(ptresp_edd>=2.0)[0][0]]
     hist_pt_edges = plot_pt_edges[1:-1]   #for plotting. To exclude overflow from the plot
-    plot_response_axis = hist.Bin("jeteta", r"Jet $\eta$", hist_pt_edges)
     
     from pltStyle import pltStyle
     pltStyle(style='paper')
     plt.rcParams['figure.subplot.left'] = 0.162
     plt.rcParams['figure.dpi'] = 150
-    
-        
     
     if combineTTbar:
         ids = output[list(output.keys())[0]].axis('dataset').identifiers()
@@ -329,9 +326,6 @@ def main():
     
             
     
-                
-            
-    
     def get_median(yvals, bin_edges):
         yvals_cumsum = np.cumsum(yvals)
         N = np.sum(yvals)
@@ -341,157 +335,207 @@ def main():
                                                                                      - bin_edges[med_bin])
         return median
     
+    def fit_response(xvals, yvals, N):
+        if_failed = False
+        
+        nonzero_bins = np.sum(yvals>0)
+        if nonzero_bins<2 or N<50:
+            p2=[0,0,0]
+            chi2 = np.nan
+            cov = np.array([[np.nan]*3]*3)
+            Ndof = 0
+        #                 print("Too little data points, skipping p = ", p2)
+        else:
+            try:
+                p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
+                     ######## Second Gaussian ########
+                xfit_l = np.where(xvals>=p[1]-np.abs(p[2])*1.5)[0][0]
+                xfit_hs = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0]
+                xfit_h = xfit_hs[0] if len(xfit_hs)>0 else len(xvals)
+        #                     print("xfit_l = ", xfit_l, ", xfit_h = ", xfit_h)
+    
+                if len(range(xfit_l,xfit_h))<6: #if there are only 3pnts, the uncertainty is infty
+                    xfit_l = xfit_l-1
+                    xfit_h = xfit_h+1
+                    if len(range(xfit_l,xfit_h))<6:
+                        xfit_l = xfit_l-1
+                        xfit_h = xfit_h+1
+                if xfit_l<0:
+                    xfit_h-=xfit_l
+                    xfit_l = 0
+                xvals2 = xvals[xfit_l: xfit_h]
+                yvals2 = yvals[xfit_l: xfit_h]
+        #                     if ptBin.lo>290:
+        #                         print("xfit_l = ", xfit_l, ", h = ", xfit_h)
+        #                         print("yvals = ", yvals)
+        #                         print("yvals2 = ", yvals2)
+                p2, cov = curve_fit(gauss, xvals2, yvals2, p0=p)
+                             ######## End second Gaussian ########
+    
+                ygaus = gauss(xvals, *p2)
+                chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
+                Ndof = len(xvals2)-3
+        #                     if chi2<50000:
+        #                         pass
+        #                         print("Fit converged, p = ", p2, ", chi2 = ", chi2 )
+        #                     else:
+        #                         print("Fit failed because of high chi2, p = ", p2, ", chi2 = ", chi2 )
+            except(RuntimeError):   #When fit failed
+                p2=[0,0,0]
+        #                     print("Fit failed because of non-convergance, p = ", p2)
+                chi2 = np.nan
+                cov = np.array([[np.nan]*3]*3)
+                Ndof = 0
+                if_failed = True
+                
+        return [p2, cov, chi2, Ndof, if_failed]
+    
+    def plot_response_dist(histo, xvals, p2, cov, chi2, Ndof, median, medianstd, N, figName ):
+        width_ik = np.abs(p2[2])
+        f_xvals = np.linspace(0,max(xvals),5001)
+        fgaus2 = gauss(f_xvals, *p2)
+        edd = histo.axes['ptresponse'].edges
+        histo = histo[1:len(edd)-2] 
+        #remove the underflow, overflow. Not sure if in hist.hist it is stored in the last and first bin like in coffea.hist
+        
+        fig, ax2 = plt.subplots();
+        histo.plot1d(ax=ax2, overlay='dataset', histtype='fill', alpha=0.6)
+        # ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
+        ax2.plot(f_xvals, fgaus2, label='Gaus',linewidth=1.8)
+        ax2.set_xlabel("Response ($p_{T,reco}/p_{T,ptcl}$)")
+        ax2.set_xlim(plot_pt_edges[[0,-1]])
+        h = ax2.get_ylim()[1]/1.05
+        plt.text(0.03,0.95*h,r'Mean {0:0.3f}$\pm${1:0.3f}'.format(p2[1], np.sqrt(cov[1,1])))
+        plt.text(0.03,0.88*h,r'Width {0:0.3f}$\pm${1:0.3f}'.format(width_ik, np.sqrt(cov[2,2])))
+        plt.text(0.03,0.81*h,r'Median {0:0.3f}$\pm${1:0.3f}'.format(median, medianstd))
+        plt.text(0.03,0.73*h,r'$\chi^2/ndof$ {0:0.2g}/{1:0.0f}'.format(chi2, Ndof))
+        plt.text(0.03,0.66*h,r'N data = {0:0.3g}'.format(N))
+        ax2.legend();
+    
+        
+        plt.savefig(figName+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
+        plt.savefig(figName+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
+        plt.close();   
+    
     import warnings
-    barable_samples = ['_b', '_c', '_s', '_u', '_d']
+    barable_samples = ['b', 'c', 's', 'u', 'd']
     
     def fit_responses(output, samp='_b'):
         warnings.filterwarnings('ignore')
         saveplots = False
         if test_run or fine_etabins:
             saveplots = False
+        saveplots = True
+    
+        
+        response_hist_all_samp = output['ptresponse'][{"pt_reco":sum}]
+        recopt_hist_all_samp = output['ptresponse'][{"ptresponse":sum}]
         
         if combine_antiflavour and (samp in barable_samples):
-            response_hist = output['ptresponse'+samp] + output['ptresponse'+samp+'bar']
+            response_hist = response_hist_all_samp[{"jet_flav":samp}] + response_hist_all_samp[{"jet_flav":samp+'bar'}]
+            recopt_hist = recopt_hist_all_samp[{"jet_flav":samp}] + recopt_hist_all_samp[{"jet_flav":samp+'bar'}]
         else:
-            response_hist = output['ptresponse'+samp]
+            response_hist = response_hist_all_samp[{"jet_flav":samp}]
+            recopt_hist = recopt_hist_all_samp[{"jet_flav":samp}]
     
-        mean = np.zeros((jetpt_length, jeteta_length))
-        medians = np.zeros((jetpt_length, jeteta_length))
-        medianstds = np.zeros((jetpt_length, jeteta_length))
-        width = np.zeros((jetpt_length, jeteta_length))
-        meanvar = np.zeros((jetpt_length, jeteta_length))
-        
-        
+        results = {}
+        results["Mean"] = np.zeros((jetpt_length, jeteta_length))
+        results["Median"] = np.zeros((jetpt_length, jeteta_length))
+        results["MedianStd"] = np.zeros((jetpt_length, jeteta_length))
+        results["MeanVar"] = np.zeros((jetpt_length, jeteta_length))
+        results["MeanRecoPt"] = np.zeros((jetpt_length, jeteta_length))
+    
         N_converge = 0
         N_not_converge = 0
     
-        FitFigDir = 'fig/responses/responses'+tag_full+'/response_pt_eta'+samp+tag_full
-        if saveplots and not os.path.exists('fig/responses'+tag_full):
-            os.mkdir('fig/responses/responses'+tag_full)
-            
-        xvals = response_hist.axis('ptresponse').centers()[1:] #[1:] to exclude the second peak for low pt
-        f_xvals = np.linspace(0,max(xvals),5001)
-        response_edges = response_hist.axis('ptresponse').edges()[1:]
+        FitFigDir1 = 'fig/responses/responses'+tag_full
+        if saveplots and not os.path.exists(FitFigDir1):
+            os.mkdir(FitFigDir1)
+        
+        FitFigDir = FitFigDir1+'/response_pt_eta'+samp+tag_full
+        if saveplots and not os.path.exists(FitFigDir):
+            os.mkdir(FitFigDir)
+    
+        xvals = response_hist.axes['ptresponse'].centers[1:] #[1:] to exclude the second peak for low pt
+        response_edges = response_hist.axes['ptresponse'].edges[1:]
     
         for i in range(jetpt_length):
-            ptBin = hist.Interval(ptbins[i], ptbins[i+1])
-            
-            if not 'inf' in str(ptBin):
-                pt_string = '_pT'+str(int(ptBin.lo))+'to'+str(int(ptBin.hi))
+            pt_lo = ptbins[i]
+            pt_hi = ptbins[i+1]
+        #         print('-'*25)
+    
+            if not np.isinf(pt_hi):
+                pt_string = '_pT'+str(int(pt_lo))+'to'+str(int(pt_hi))
             else:
-                pt_string = '_pT'+str(ptBin.lo) + 'to' + str(ptBin.hi)
+                pt_string = '_pT'+str(pt_lo) + 'to' + str(pt_hi)
                 pt_string = pt_string.replace('.0','').replace('-infto','0to')
     
             for k in range(jeteta_length):
-                etaBinPl = hist.Interval(etabins[k+jeteta_length], etabins[k+1+jeteta_length])
-                etaBinMi = hist.Interval(etabins[jeteta_length-k-1], etabins[jeteta_length-k])
-                eta_string = '_eta'+str(etaBinPl.lo)+'to'+str(etaBinPl.hi)
+                etaPl_lo = etabins[k+jeteta_length]
+                etaPl_hi = etabins[k+1+jeteta_length]
+                etaMi_lo = etabins[jeteta_length-k-1]
+                etaMi_hi = etabins[jeteta_length-k]
+                eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
                 eta_string = eta_string.replace('.','')
-                
-                # The name integrate is a bit misleasding in this line. Is there another way to "slice" a histogram? //Andris
-                histoMi = response_hist.integrate('jeteta', etaBinMi).integrate('pt', ptBin)
-                histoPl = response_hist.integrate('jeteta', etaBinPl).integrate('pt', ptBin)
-                histo = (histoMi+histoPl)
-                    
-                dataset_name = list(histo.values().keys())[0]
-                yvals = histo.values()[dataset_name][1:]  #[1:] to exclude the second peak for low pt
     
+                    
+                sliceMi = {'jeteta': slice(hist.loc(etaMi_lo),hist.loc(etaMi_hi),sum),
+                            'pt_gen': slice(hist.loc(pt_lo),hist.loc(pt_hi),sum)}
+                slicePl = {'jeteta': slice(hist.loc(etaPl_lo),hist.loc(etaPl_hi),sum),
+                            'pt_gen': slice(hist.loc(pt_lo),hist.loc(pt_hi),sum)}
+    
+                histoMi = response_hist[sliceMi]
+                histoPl = response_hist[slicePl]
+                histo = (histoMi+histoPl)
+                
+                histoptMi = recopt_hist[sliceMi]
+                histoptPl = recopt_hist[slicePl]
+                histopt = (histoptMi+histoptPl)
+    
+                yvals = histo.values()[1:]     #[1:] to exclude the second peak for low pt
                 N = np.sum(yvals)
-                
-               ####################### Calculate median and rms ############################
-                
+    
+                ####################### Calculate median and rms ############################
                 yvals_cumsum = np.cumsum(yvals)
-                   # For N<200 too little statistics to calculate the error resonably
                 med_bin = np.nonzero(yvals_cumsum>N/2)[0][0] if N>200 else 0
                 median = response_edges[med_bin] + (N/2 - yvals_cumsum[med_bin-1])/yvals[med_bin]*(response_edges[med_bin+1]
                                                                                           - response_edges[med_bin])
-                
+    
                 hist_mean = np.sum(xvals*yvals)/sum(yvals) 
                 hist_rms = np.sqrt(np.sum(yvals*((hist_mean-xvals)**2))/sum(yvals))
                 medianstd = 1.253 * hist_rms/np.sqrt(N)
                 
-               ####################### Fitting ############################
-                nonzero_bins = np.sum(yvals>0)
-                if nonzero_bins<2 or N<50:
-                    p2=[0,0,0]
-                    chi2 = np.nan
-                    arr = np.array([[np.nan]*3]*3)
-                    Ndof = 0
+                ##################### Mean of the pt_reco  ######################
+                ### (this is the binned mean, not the real data mean)  
+                y = histopt.counts()
+                x = histopt.axes['pt_reco'].centers
+                mean_reco_pt = np.sum(x*y)/sum(y)
+    
+                ####################### Fitting ############################
+                p2, cov, chi2, Ndof, if_failed = fit_response(xvals, yvals, N)
+                if if_failed:
+                    N_not_converge += 1
                 else:
-                    try:
-                        p, arr = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
-                        N_converge += 1
-                             ######## Second Gaussian ########
-                        xfit_l = np.where(xvals>=p[1]-np.abs(p[2])*1.5)[0][0]
-                        xfit_hs = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0]
-                        xfit_h = xfit_hs[0] if len(xfit_hs)>0 else len(xvals)
-                        
-                        if len(range(xfit_l,xfit_h))<6: #if there are only 3pnts, the uncertainty is infty
-                            xfit_l = xfit_l-1
-                            xfit_h = xfit_h+1
-                            if len(range(xfit_l,xfit_h))<6:
-                                xfit_l = xfit_l-1
-                                xfit_h = xfit_h+1
-                        if xfit_l<0:
-                            xfit_h-=xfit_l
-                            xfit_l = 0
-                        xvals2 = xvals[xfit_l: xfit_h]
-                        yvals2 = yvals[xfit_l: xfit_h]
-                        p2, arr = curve_fit(gauss, xvals2, yvals2, p0=p)
-    
-                        ygaus = gauss(xvals, *p2)
-                        chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
-                        Ndof = len(xvals2)-3
-                    except(RuntimeError):
-                        p2=[0,0,0]
-                        chi2 = np.nan
-                        arr = np.array([[np.nan]*3]*3)
-                        Ndof = 0
-                        N_not_converge += 1
-                        continue
-    
-                fgaus2 = gauss(f_xvals, *p2)
-    
-                width_ik = np.abs(p2[2])
+                    N_converge += 1
                 
-                mean[i,k] = p2[1]
-                meanvar[i,k] = arr[1,1]
-                medians[i,k] = median
-                medianstds[i,k] = medianstd
-                width[i,k] = width_ik
+                results["Mean"][i,k] = p2[1]
+                results["MeanVar"][i,k] = cov[1,1]
+                results["Median"][i,k] = median
+                results["MedianStd"][i,k] = medianstd
+                results["MeanRecoPt"][i,k] = mean_reco_pt
+        #             chi2s[i,k] = chi2
     
-       ####################### Plotting ############################
-    
-            
+        ####################### Plotting ############################
                 if  saveplots:
-                    histo = histo.rebin('ptresponse', plot_response_axis)
-    
-                    fig, ax2 = plt.subplots();
-                    hist.plot1d(histo, ax=ax2, overlay='dataset', overflow='all',
-                                fill_opts={'alpha': .5, 'edgecolor': (0,0,0,0.3), 'linewidth': 1.4})
-                    # ax2.plot(f_xvals, fgaus, label='Gaus',linewidth=1.8)
-                    ax2.plot(f_xvals, fgaus2, label='Gaus',linewidth=1.8)
-                    ax2.set_xlabel("Response ($p_{T,reco}/p_{T,ptcl}$)")
-                    ax2.set_xlim(plot_pt_edges[[0,-1]])
-                    h = ax2.get_ylim()[1]/1.05
-                    plt.text(0.03,0.95*h,r'Mean {0:0.3f}$\pm${1:0.3f}'.format(p2[1], np.sqrt(arr[1,1])))
-                    plt.text(0.03,0.88*h,r'Width {0:0.3f}$\pm${1:0.3f}'.format(width_ik, np.sqrt(arr[2,2])))
-                    plt.text(0.03,0.81*h,r'Median {0:0.3f}$\pm${1:0.3f}'.format(median, medianstd))
-                    plt.text(0.03,0.73*h,r'$\chi^2/ndof$ {0:0.2g}/{1:0.0f}'.format(chi2, Ndof))
-                    plt.text(0.03,0.66*h,r'N data = {0:0.3g}'.format(N))
-                    ax2.legend();
-    
-                    plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
-                    plt.savefig(FitFigDir+'/ptResponse'+pt_string+eta_string+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
-                    plt.close();                
+                    figName = FitFigDir+'/ptResponse'+pt_string+eta_string
+                    plot_response_dist(histo, xvals, p2, cov, chi2, Ndof, median, medianstd, N, figName)              
     
         print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
         warnings.filterwarnings('default')
         
-        return [mean, meanvar, medians, medianstds] #width, 
-        
+        return results  
     
-    def plot_corrections(mean, samp, meanstd):
+    def plot_corrections(mean, meanstd, samp):
         ### To ignore the points with 0 on y axis when setting the y axis limits
         mean_p = mean.copy()
         mean_p[mean_p==0] = np.nan
@@ -550,7 +594,7 @@ def main():
         plt.show();
         
     
-    def plot_corrections_eta(mean, samp, meanstd):
+    def plot_corrections_eta(mean, meanstd, samp):
         ### To ignore the points with 0 on y axis when setting the y axis limits
         mean_p = mean.copy()
         mean_p[mean_p==0] = np.nan
@@ -617,31 +661,41 @@ def main():
     medians = []
     medianstds = []
     
-    combine_antiflavour = False
-    subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
+    combine_antiflavour = True
+    # subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
+    subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar']
+    subsamples = ['b']
+    # subsamples = ['_b', '_c', '_ud', '_s', '_g']
+    # subsamples = ['', '_ud', '_g'] # , '_b']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
         print('Fitting subsample: ', samp)
         if load_fit_res:
-            mean = read_data("Median", samp)
-            meanvar = read_data("MedianVar", samp)
-            median = read_data("Median", samp)
-            medianstd = read_data("MedianStd", samp)
+            samp = "_"+samp
+            result = {}
+            keys = ["Median", "MedianVar", "Median", "MedianStd", "MeanRecoPt"] 
+            for key in keys:
+                result[key] = read_data(key, samp)
+
         else:
-            mean, meanvar, median, medianstd = fit_responses(output, samp)
-            medians.append(median[0][0])
-            medianstds.append(medianstd[0][0])
-            for data, name in zip([mean, meanvar, median, medianstd],["Mean", "MeanVar", "Median", "MedianStd"]):
-                save_data(data, name, samp)
+            result = fit_responses(output, samp)
+            samp = "_"+samp
+            medians.append(result["Median"][0][0])
+            medianstds.append(result["MedianStd"][0][0])
+            for key in result:
+                save_data(result[key], key, samp)
                 pass
-                
-        meanstd = np.sqrt(meanvar)
-                
+
+        median = result["Median"]
+        medianStd = result["MedianStd"]
+
+        meanstd = np.sqrt(result["MeanVar"])
+
         if fine_etabins or one_bin:
-            plot_corrections_eta(median, samp, medianstd)
+            plot_corrections_eta(result["Median"], result["MedianStd"], samp)
         else:
-            plot_corrections(median, samp, medianstd)
+            plot_corrections(result["Median"], result["MedianStd"], samp)
     
     print('-----'*10)
     print("All done. Congrats!")
