@@ -1,6 +1,6 @@
 ### CoffeaJERC-Andris.py
 ### File automatically converted using ConvertJupyterToPy.ipynb from CoffeaJERC-Andris.ipynb
-### No comments or formatting is preserved by the transfer
+### No comments or formatting is preserved by the transfer.
 def main():
     
     from notebook.services.config import ConfigManager
@@ -34,20 +34,20 @@ def main():
     import os
     
     UsingDaskExecutor = True
-    CERNCondorCluster = False
+    CERNCondorCluster = True
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = True   ### True if run only on one file
+    test_run          = False   ### True if run only on one file
     load_fit_res      = False   ### True if don't repeat the response fits
     
     fine_etabins      = False   ### Don't merge eta bins together when fitting responses. Preprocessing always done in many bins
     one_bin           = False   ### Unite all eta and pt bins in one
     
-    Nfiles = 100                 ### -1 for all files
+    Nfiles = -1                 ### -1 for all files
     
     tag = '_L5'                 ### L5 or L23, but L23 not supported since ages
     
-    add_tag = '_LHEflav1_TTBAR-JME'
+    add_tag = '_QCD-JME'
     
     xrootdstr = 'root://xrootd-cms.infn.it/'
     
@@ -57,9 +57,12 @@ def main():
     prixydir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
         
     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
+    dataset = 'fileNames/fileNames_DYJets.txt'
+    dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
     
     with open(dataset) as f:
         rootfiles = f.read().split()
+    
     
     Processor = importlib.import_module('CoffeaJERCProcessor'+tag).Processor
     
@@ -146,7 +149,6 @@ def main():
     os.environ['X509_USER_CERT'] = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
     import uproot
-    
     ff = uproot.open(fileslist[0])
     ff.keys()
     ff.close()
@@ -173,7 +175,7 @@ def main():
     
             cluster = CernCluster(
                 env_extra=env_extra,
-                cores = 4,
+                cores = 1,
                 memory = '4000MB',
                 disk = '2000MB',
                 death_timeout = '60',
@@ -182,7 +184,7 @@ def main():
                 container_runtime = 'none',
                 log_directory = '/eos/user/a/anpotreb/condor/log',
                 scheduler_options = {
-                    'port': 8786,
+                    'port': 8886,
                     'host': socket.gethostname(),
                 },
                 job_extra = {
@@ -190,7 +192,7 @@ def main():
                     'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
                 },
             )
-            cluster.adapt(minimum=2, maximum=50)
+            cluster.adapt(minimum=2, maximum=100)
             cluster.scale(8)
             client = Client(cluster)
         
@@ -204,7 +206,7 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    Chunk = [10000, 5] # [chunksize, maxchunks]
+    Chunk = [100000, 20] # [chunksize, maxchunks]
     
     if not load_preexisting:
         if not UsingDaskExecutor:
@@ -232,7 +234,7 @@ def main():
                                                   'xrootdtimeout': 60,
                                                   'retries': 2,
                                               },
-                                              chunksize=Chunk[0])#, maxchunks=Chunk[1])
+                                              chunksize=Chunk[0]) # maxchunks=Chunk[1])
     
         elapsed = time.time() - tstart
         print("Processor finished. Time elapsed: ", elapsed)
@@ -258,18 +260,25 @@ def main():
         A, mu, sigma = p
         return A*np.exp(-(x-mu)**2/(2.*sigma**2))
     
+    output
+    
+    for key in output.keys():
+        if 'response' in key:
+            response_key = key
+            break
+    
     if fine_etabins==True:
         ptbins = np.array([15, 40, 150, 400, 4000, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-        etabins = output['ptresponse'].axes["jeteta"].edges #output['ptresponse'].axis('jeteta').edges()
+        etabins = output[response_key].axes["jeteta"].edges #output['ptresponse'].axis('jeteta').edges()
     elif one_bin==True:
         ptbins = np.array([15, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
         etabins = np.array([etabins[0], 0, etabins[-1]])
     else:
-        ptbins = output['ptresponse'].axes["pt_gen"].edges 
-        ptbins_c = output['ptresponse'].axes['pt_gen'].centers
+        ptbins = output[response_key].axes["pt_gen"].edges 
+        ptbins_c = output[response_key].axes['pt_gen'].centers
         etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
     
         
@@ -279,7 +288,7 @@ def main():
     etabins_mod = etabins[(len(etabins)-1)//2:]
     etabins_c = (etabins_mod[:-1]+etabins_mod[1:])/2 #output['ptresponse'].axis('jeteta').centers()
     
-    ptresp_edd = output['ptresponse'].axes['ptresponse'].edges
+    ptresp_edd = output[response_key].axes['ptresponse'].edges
     plot_pt_edges = ptresp_edd[0:np.nonzero(ptresp_edd>=2.0)[0][0]]
     hist_pt_edges = plot_pt_edges[1:-1]   #for plotting. To exclude overflow from the plot
     
@@ -326,14 +335,23 @@ def main():
     
             
     
-    def get_median(yvals, bin_edges):
+    def get_median(xvals, yvals, bin_edges):
+        ''' Calculate median and median error (assuming Gaussian distribution).
+        This is the binned median, not the real data median
+        Extrapolation withing bins is performed.
+        '''
         yvals_cumsum = np.cumsum(yvals)
         N = np.sum(yvals)
         med_bin = np.nonzero(yvals_cumsum>N/2)[0][0] if N>200 else 0
         
         median = bin_edges[med_bin] + (N/2 - yvals_cumsum[med_bin-1])/yvals[med_bin]*(bin_edges[med_bin+1]
                                                                                      - bin_edges[med_bin])
-        return median
+        
+        hist_mean = np.sum(xvals*yvals)/sum(yvals) 
+        hist_rms = np.sqrt(np.sum(yvals*((hist_mean-xvals)**2))/sum(yvals))
+        medianstd = 1.253 * hist_rms/np.sqrt(N)
+        
+        return median, medianstd
     
     def fit_response(xvals, yvals, N):
         if_failed = False
@@ -428,15 +446,14 @@ def main():
         saveplots = True
     
         
-        response_hist_all_samp = output['ptresponse'][{"pt_reco":sum}]
-        recopt_hist_all_samp = output['ptresponse'][{"ptresponse":sum}]
         
         if combine_antiflavour and (samp in barable_samples):
-            response_hist = response_hist_all_samp[{"jet_flav":samp}] + response_hist_all_samp[{"jet_flav":samp+'bar'}]
-            recopt_hist = recopt_hist_all_samp[{"jet_flav":samp}] + recopt_hist_all_samp[{"jet_flav":samp+'bar'}]
+            response_hist = output['ptresponse'+'_'+samp] + output['ptresponse'+'_'+samp+'bar']
+            recopt_hist = output['reco_pt_sumwx'+'_'+samp] + output['reco_pt_sumwx'+'_'+samp+'bar']
+    
         else:
-            response_hist = response_hist_all_samp[{"jet_flav":samp}]
-            recopt_hist = recopt_hist_all_samp[{"jet_flav":samp}]
+            response_hist = output['ptresponse'+'_'+samp]
+            recopt_hist = output['reco_pt_sumwx'+'_'+samp]
     
         results = {}
         results["Mean"] = np.zeros((jetpt_length, jeteta_length))
@@ -495,22 +512,14 @@ def main():
                 yvals = histo.values()[1:]     #[1:] to exclude the second peak for low pt
                 N = np.sum(yvals)
     
-                ####################### Calculate median and rms ############################
-                yvals_cumsum = np.cumsum(yvals)
-                med_bin = np.nonzero(yvals_cumsum>N/2)[0][0] if N>200 else 0
-                median = response_edges[med_bin] + (N/2 - yvals_cumsum[med_bin-1])/yvals[med_bin]*(response_edges[med_bin+1]
-                                                                                          - response_edges[med_bin])
-    
-                hist_mean = np.sum(xvals*yvals)/sum(yvals) 
-                hist_rms = np.sqrt(np.sum(yvals*((hist_mean-xvals)**2))/sum(yvals))
-                medianstd = 1.253 * hist_rms/np.sqrt(N)
+                median, medianstd = get_median(xvals, yvals, response_edges)
                 
                 ##################### Mean of the pt_reco  ######################
-                ### (this is the binned mean, not the real data mean)  
-                y = histopt.counts()
-                x = histopt.axes['pt_reco'].centers
-                mean_reco_pt = np.sum(x*y)/sum(y)
-    
+                ### (The mean includes events that potentially had ptresponse in the second peak at low pt)
+                ### No way to distinguish it if only x*weights are saved instead of the whole histogram.
+                N = np.sum(yvals)
+                mean_reco_pt = histopt.value/np.sum(histo.values())
+                
                 ####################### Fitting ############################
                 p2, cov, chi2, Ndof, if_failed = fit_response(xvals, yvals, N)
                 if if_failed:
@@ -534,6 +543,21 @@ def main():
         warnings.filterwarnings('default')
         
         return results  
+    
+    i = 10
+    sliceMi = {'jeteta': slice(hist.loc(etabins[5]),hist.loc(etabins[6]),sum),
+                'pt_gen': slice(hist.loc(ptbins[i]),hist.loc(ptbins[i+1]),sum)}
+    slicePl = {'jeteta': slice(hist.loc(0),hist.loc(-1.5),sum),
+                'pt_gen': slice(hist.loc(30),hist.loc(32),sum)}
+    
+    ptbins[i]
+    ptbins[i+1]
+    
+    recopt_hist = output['reco_pt_sumwx'+'_'+'b']
+    response_hist = output['ptresponse'+'_'+'b']
+    histoMi = response_hist[sliceMi]
+    
+    histoptMi = recopt_hist[sliceMi]
     
     def plot_corrections(mean, meanstd, samp):
         ### To ignore the points with 0 on y axis when setting the y axis limits
@@ -662,11 +686,8 @@ def main():
     medianstds = []
     
     combine_antiflavour = True
-    # subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
     subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar']
-    subsamples = ['b']
-    # subsamples = ['_b', '_c', '_ud', '_s', '_g']
-    # subsamples = ['', '_ud', '_g'] # , '_b']
+#     subsamples = ['b']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
@@ -677,7 +698,7 @@ def main():
             keys = ["Median", "MedianVar", "Median", "MedianStd", "MeanRecoPt"] 
             for key in keys:
                 result[key] = read_data(key, samp)
-
+        
         else:
             result = fit_responses(output, samp)
             samp = "_"+samp
@@ -686,12 +707,12 @@ def main():
             for key in result:
                 save_data(result[key], key, samp)
                 pass
-
+                
         median = result["Median"]
         medianStd = result["MedianStd"]
-
+        
         meanstd = np.sqrt(result["MeanVar"])
-
+                
         if fine_etabins or one_bin:
             plot_corrections_eta(result["Median"], result["MedianStd"], samp)
         else:

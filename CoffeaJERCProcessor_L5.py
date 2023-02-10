@@ -129,7 +129,11 @@ class Processor(processor.ProcessorABC):
     def accumulator(self):
         return self._accumulator
 
-    @profile
+#     @profile    
+#     def for_memory_testing(self):
+#         a=1
+        
+#     @profile    
     def process(self, events):
         
         subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar']
@@ -141,10 +145,19 @@ class Processor(processor.ProcessorABC):
 
         self.subsamples = subsamples
         
-        output = {}
-        output['ptresponse'] = hist.Hist(flavour_axis,
-                                            pt_gen_axis, pt_reco_axis, ptresponse_axis, jeteta_axis,
-                                            storage="weight", name="Counts")
+#         self.for_memory_testing()
+        output = {'ptresponse_'+samp:hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
+                  for samp in subsamples}
+#         output['ptresponse'] = hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
+#         output['ptresponse'] = hist.Hist(flavour_axis,
+#                                             pt_gen_axis, ptresponse_axis, jeteta_axis,
+#                                             storage="weight", name="Counts")
+#         self.for_memory_testing()
+        ### Store only the sums of values. Much simpler than storing the whole reco_pt histogram
+        for samp in subsamples:
+            output['reco_pt_sumwx_'+samp] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
+#         output['reco_pt_sumwx'] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
+#         self.for_memory_testing()
         
         cutflow_axis = hist.axis.StrCategory([], growth=True, name="cutflow", label="Cutflow Scenarios")
         output['cutflow'] = hist.Hist(cutflow_axis, storage="weight", label="Counts")
@@ -153,17 +166,17 @@ class Processor(processor.ProcessorABC):
     
         # Event Cuts
         # apply npv cuts
-        output['cutflow'].fill(cutflow=np.repeat('all_events', len(events)))
+        output['cutflow'].fill(cutflow='all_events', weight=len(events))
         
         npvCut = (events.PV.npvsGood > 0)
         pvzCut = (np.abs(events.PV.z) < 24)
         rxyCut = (np.sqrt(events.PV.x*events.PV.x + events.PV.y*events.PV.y) < 2)
         
         selectedEvents = events[npvCut & pvzCut & rxyCut]
-        output['cutflow'].fill(cutflow=np.repeat('selected_events', len(selectedEvents)))
+        output['cutflow'].fill(cutflow='selected_events', weight=len(selectedEvents))
         # get GenJets and Jets
         jets = selectedEvents.Jet
-        output['cutflow'].fill(cutflow=np.repeat('all_jets', ak.sum(ak.num(jets))))
+        output['cutflow'].fill(cutflow='all_jets', weight=ak.sum(ak.num(jets)))
         
         lhe_part_exists = False
 #         try:
@@ -220,7 +233,7 @@ class Processor(processor.ProcessorABC):
         jet_mask = jet_gen_match_mask  & dressed_electron_mask & dressed_muon_mask
             
         selected_jets = jets[jet_mask]
-        output['cutflow'].fill(cutflow=np.repeat('gen_matched+no_dressed_lep', ak.sum(ak.num(selected_jets))))
+        output['cutflow'].fill(cutflow='gen_matched+no_dressed_lep', weight=ak.sum(ak.num(selected_jets)))
 
 
         jet_pt_mask = selected_jets.matched_gen.pt>20
@@ -232,7 +245,7 @@ class Processor(processor.ProcessorABC):
         sel_jets = selected_jets[jet_pt_mask]
         
                                
-        output['cutflow'].fill(cutflow=np.repeat('jetpt>20', ak.sum(ak.num(sel_jets))))
+        output['cutflow'].fill(cutflow='jetpt>20', weight=ak.sum(ak.num(sel_jets)))
         
         
                 # Cut on overlapping jets
@@ -240,7 +253,7 @@ class Processor(processor.ProcessorABC):
         jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
         sel_jets = sel_jets[jet_iso_mask]
         
-        output['cutflow'].fill(cutflow=np.repeat('iso jets', ak.sum(ak.num(sel_jets))))
+        output['cutflow'].fill(cutflow='iso jets', weight=ak.sum(ak.num(sel_jets)))
 
         # print("jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_mask")
         
@@ -284,7 +297,7 @@ class Processor(processor.ProcessorABC):
         Assign the flavour of the hardest selected LHE particle.
         """
 
-        lhe_part_exists = True
+        lhe_part_exists = False
         if lhe_part_exists:
                 LHE_flavour = ak.zeros_like(reco_jets.hadronFlavour)
                 jet_shape = ak.num(reco_jets.hadronFlavour)
@@ -352,9 +365,9 @@ class Processor(processor.ProcessorABC):
         
         ptresponse_np = jetpt / gen_jetpt # / self.closure_corr[correction_pos_pt, correction_pos_eta]
         
-#         jet_flavour = reco_jets.partonFlavour
+        jet_flavour = reco_jets.partonFlavour
 #         jet_flavour = reco_jets.LHE_Flavour2
-        jet_flavour = reco_jets.LHE_Flavour
+#         jet_flavour = reco_jets.LHE_Flavour
         
         subsamples = self.subsamples
         masks = {}
@@ -383,17 +396,21 @@ class Processor(processor.ProcessorABC):
 
         ########### Filling of the histograms ###############
         
-        output['ptresponse'].fill(jet_flav='', pt_gen=gen_jetpt,
-                                                   pt_reco=jetpt,
-                                                   jeteta=gen_jeteta,
-                                                   ptresponse=ptresponse_np)
-  
+#         output['ptresponse'].fill(pt_gen=gen_jetpt,
+#                                                    jeteta=gen_jeteta,
+#                                                    ptresponse=ptresponse_np)
         for sample in subsamples:
-               output['ptresponse'].fill(jet_flav=sample, pt_gen=gen_jetpts[sample],
-                                    pt_reco=jetpts[sample],
+               output['ptresponse_'+sample].fill(pt_gen=gen_jetpts[sample],
                                     jeteta=gen_jetetas[sample],
                                     ptresponse=ptresponses[sample])
-            
+
+#         output['reco_pt_sumwx'].fill(pt_gen=gen_jetpt,
+#                                        jeteta=gen_jeteta, weight=np.sum(jetpts))
+  
+        for sample in subsamples:
+               output['reco_pt_sumwx_'+sample].fill(pt_gen=gen_jetpts[sample],
+                                    jeteta=gen_jetetas[sample], weight=jetpts[sample])
+#         self.for_memory_testing()
 
         return output
 
