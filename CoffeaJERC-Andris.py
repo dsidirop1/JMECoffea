@@ -34,20 +34,20 @@ def main():
     import os
     
     UsingDaskExecutor = True
-    CERNCondorCluster = True
+    CERNCondorCluster = False
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = False   ### True if run only on one file
+    test_run          = True   ### True if run only on one file
     load_fit_res      = False   ### True if don't repeat the response fits
     
     fine_etabins      = False   ### Don't merge eta bins together when fitting responses. Preprocessing always done in many bins
     one_bin           = False   ### Unite all eta and pt bins in one
     
-    Nfiles = -1                 ### -1 for all files
+    Nfiles = 100                 ### -1 for all files
     
     tag = '_L5'                 ### L5 or L23, but L23 not supported since ages
     
-    add_tag = '_QCD-JME'
+    add_tag = '_LHEflav1_QCD-JME'
     
     xrootdstr = 'root://xrootd-cms.infn.it/'
     
@@ -57,12 +57,10 @@ def main():
     prixydir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
         
     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
-    dataset = 'fileNames/fileNames_DYJets.txt'
     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
     
     with open(dataset) as f:
         rootfiles = f.read().split()
-    
     
     Processor = importlib.import_module('CoffeaJERCProcessor'+tag).Processor
     
@@ -175,7 +173,7 @@ def main():
     
             cluster = CernCluster(
                 env_extra=env_extra,
-                cores = 1,
+                cores = 4,
                 memory = '4000MB',
                 disk = '2000MB',
                 death_timeout = '60',
@@ -184,7 +182,7 @@ def main():
                 container_runtime = 'none',
                 log_directory = '/eos/user/a/anpotreb/condor/log',
                 scheduler_options = {
-                    'port': 8886,
+                    'port': 8786,
                     'host': socket.gethostname(),
                 },
                 job_extra = {
@@ -192,11 +190,12 @@ def main():
                     'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
                 },
             )
-            cluster.adapt(minimum=2, maximum=100)
+            cluster.adapt(minimum=2, maximum=50)
             cluster.scale(8)
             client = Client(cluster)
         
         client.upload_file('CoffeaJERCProcessor'+tag+'.py')
+        client.upload_file('count_2d.py')
     
         client
     
@@ -206,7 +205,7 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    Chunk = [100000, 20] # [chunksize, maxchunks]
+    Chunk = [10000, 5] # [chunksize, maxchunks]
     
     if not load_preexisting:
         if not UsingDaskExecutor:
@@ -234,7 +233,7 @@ def main():
                                                   'xrootdtimeout': 60,
                                                   'retries': 2,
                                               },
-                                              chunksize=Chunk[0]) # maxchunks=Chunk[1])
+                                              chunksize=Chunk[0])#, maxchunks=Chunk[1])
     
         elapsed = time.time() - tstart
         print("Processor finished. Time elapsed: ", elapsed)
@@ -250,6 +249,10 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
+    output
+    
+    fileslist
+    
     if UsingDaskExecutor:
         client.close()
         time.sleep(5)
@@ -259,8 +262,6 @@ def main():
     def gauss(x, *p):
         A, mu, sigma = p
         return A*np.exp(-(x-mu)**2/(2.*sigma**2))
-    
-    output
     
     for key in output.keys():
         if 'response' in key:
@@ -443,14 +444,17 @@ def main():
         saveplots = False
         if test_run or fine_etabins:
             saveplots = False
-        saveplots = True
     
         
         
         if combine_antiflavour and (samp in barable_samples):
             response_hist = output['ptresponse'+'_'+samp] + output['ptresponse'+'_'+samp+'bar']
             recopt_hist = output['reco_pt_sumwx'+'_'+samp] + output['reco_pt_sumwx'+'_'+samp+'bar']
-    
+        elif samp == 'all':
+            all_responses = {key:output[key] for key in output.keys() if 'ptresponse' in key}
+            response_hist = sum(all_responses.values())
+            all_reco_pts = {key:output[key] for key in output.keys() if 'reco_pt_sumwx' in key}
+            recopt_hist = sum(all_reco_pts.values())
         else:
             response_hist = output['ptresponse'+'_'+samp]
             recopt_hist = output['reco_pt_sumwx'+'_'+samp]
@@ -472,6 +476,9 @@ def main():
         FitFigDir = FitFigDir1+'/response_pt_eta'+samp+tag_full
         if saveplots and not os.path.exists(FitFigDir):
             os.mkdir(FitFigDir)
+            print("Response fits will be saved under ", FitFigDir)
+        elif not saveplots:
+            print("Response fits won't be saved")
     
         xvals = response_hist.axes['ptresponse'].centers[1:] #[1:] to exclude the second peak for low pt
         response_edges = response_hist.axes['ptresponse'].edges[1:]
@@ -687,7 +694,7 @@ def main():
     
     combine_antiflavour = True
     subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar']
-#     subsamples = ['b']
+    subsamples = ['all', 'b', 'bbar']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
