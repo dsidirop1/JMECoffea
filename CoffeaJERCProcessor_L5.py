@@ -6,6 +6,7 @@ from memory_profiler import profile
 # print(h.heap())
 
 import sys
+sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/coffea')
 sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
 sys.path
 
@@ -22,7 +23,7 @@ from coffea.jetmet_tools import JetCorrectionUncertainty # FactorizedJetCorrecto
 from coffea.jetmet_tools import JECStack, CorrectedJetsFactory
 from coffea.lookup_tools import extractor
 
-from coffea.count_2d import count_2d
+from count_2d import count_2d
 import hist
 # from coffea import some_test_func
 # some_test_func.test_func()
@@ -130,8 +131,8 @@ class Processor(processor.ProcessorABC):
         return self._accumulator
 
 #     @profile    
-#     def for_memory_testing(self):
-#         a=1
+    def for_memory_testing(self):
+        a=1
         
 #     @profile    
     def process(self, events):
@@ -152,7 +153,7 @@ class Processor(processor.ProcessorABC):
 #         output['ptresponse'] = hist.Hist(flavour_axis,
 #                                             pt_gen_axis, ptresponse_axis, jeteta_axis,
 #                                             storage="weight", name="Counts")
-#         self.for_memory_testing()
+        self.for_memory_testing()
         ### Store only the sums of values. Much simpler than storing the whole reco_pt histogram
         for samp in subsamples:
             output['reco_pt_sumwx_'+samp] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
@@ -410,7 +411,7 @@ class Processor(processor.ProcessorABC):
         for sample in subsamples:
                output['reco_pt_sumwx_'+sample].fill(pt_gen=gen_jetpts[sample],
                                     jeteta=gen_jetetas[sample], weight=jetpts[sample])
-#         self.for_memory_testing()
+        self.for_memory_testing()
 
         return output
 
