@@ -6,8 +6,8 @@ from memory_profiler import profile
 # print(h.heap())
 
 import sys
-sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/coffea')
-sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
+# sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/coffea')
+# sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
 sys.path
 
 # from os import listdir
@@ -115,29 +115,28 @@ class Processor(processor.ProcessorABC):
         
         self.jet_factory = CorrectedJetsFactory(self.name_map, jec_stack)
 
-        df_csv = pd.read_csv('out_txt/Closure_L5_QCD.csv').set_index('etaBins')
+        df_csv = pd.read_csv('out_txt/Closure_L5_QCD_Pythia.coffea').set_index('etaBins')
         self.closure_corr = df_csv.to_numpy().transpose()
         self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
+        self.etabins_closure = df_csv.index.to_numpy()
+        self.ptbins_closure = df_csv.columns.to_numpy('float')
         
-#         ### Uncomment to make a correction for closure
+#         ### Uncomment to set closure as 1
 #         self.closure_corr = np.ones(self.closure_corr.shape)
-        
-#         print(dir(evaluator))
-#         print()
 
             
     @property
     def accumulator(self):
         return self._accumulator
 
-#     @profile    
+    @profile    
     def for_memory_testing(self):
         a=1
         
 #     @profile    
     def process(self, events):
         
-        subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar']
+        subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar', 'untagged']
         flavour_axis = hist.axis.StrCategory(subsamples, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of subsamples. See, https://github.com/CoffeaTeam/coffea/discussions/705
         pt_gen_axis = hist.axis.Variable(ptbins, name="pt_gen", overflow=True, underflow=True, label=r"$p_{T,gen}$")
 #         pt_reco_axis = hist.axis.Variable(ptbins, name="pt_reco", overflow=True, underflow=True, label=r"$p_{T,reco}$")
@@ -361,10 +360,12 @@ class Processor(processor.ProcessorABC):
         
         etabins_abs = etabins[(len(etabins)-1)//2:] ##the positive eta bins
         ptresponse_np = jetpt / gen_jetpt
-        correction_pos_pt = len(ptbins) - np.count_nonzero(np.array(gen_jetpt, ndmin=2).transpose() < ptbins, axis=1)
-        correction_pos_eta = len(etabins_abs) - np.count_nonzero(np.abs(np.array(gen_jeteta, ndmin=2).transpose()) < etabins_abs, axis=1)
+        correction_pos_pt = (len(self.ptbins_closure)
+                              - np.count_nonzero(np.array(gen_jetpt, ndmin=2).transpose() < self.ptbins_closure, axis=1))
+        correction_pos_eta = (len(self.etabins_closure)
+                              - np.count_nonzero(np.abs(np.array(gen_jeteta, ndmin=2).transpose()) < self.etabins_closure, axis=1))
         
-        ptresponse_np = jetpt / gen_jetpt # / self.closure_corr[correction_pos_pt, correction_pos_eta]
+        ptresponse_np = jetpt / gen_jetpt / self.closure_corr[correction_pos_pt, correction_pos_eta]
         
         jet_flavour = reco_jets.partonFlavour
 #         jet_flavour = reco_jets.LHE_Flavour2
@@ -383,7 +384,10 @@ class Processor(processor.ProcessorABC):
         masks['dbar'] = ak.flatten(jet_flavour==-2).to_numpy( allow_missing=True)
         masks['sbar'] = ak.flatten((jet_flavour==-3) ).to_numpy( allow_missing=True)
         masks['g'] = ak.flatten(jet_flavour==21).to_numpy( allow_missing=True)
-
+        from functools import reduce
+        masks['untagged'] = reduce(lambda x, y: (~ x)*(~ y), masks.values()) ## find the jets that are not taggeed
+        
+        
         ptresponses     = { sample: ptresponse_np[masks[sample]]        for sample in subsamples }
         gen_jetpts      = { sample: gen_jetpt[masks[sample]]            for sample in subsamples }
         gen_jetetas     = { sample: gen_jeteta[masks[sample]]           for sample in subsamples }

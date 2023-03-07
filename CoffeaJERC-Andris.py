@@ -34,20 +34,20 @@ def main():
     import os
     
     UsingDaskExecutor = True
-    CERNCondorCluster = False
+    CERNCondorCluster = True
     CoffeaCasaEnv     = False
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = True   ### True if run only on one file
+    test_run          = False   ### True if run only on one file
     load_fit_res      = False   ### True if don't repeat the response fits
     
     fine_etabins      = False   ### Don't merge eta bins together when fitting responses. Preprocessing always done in many bins
     one_bin           = False   ### Unite all eta and pt bins in one
     
-    Nfiles = 100                 ### -1 for all files
+    Nfiles = -1                 ### -1 for all files
     
     tag = '_L5'                 ### L5 or L23, but L23 not supported since ages
     
-    add_tag = '_LHEflav1_QCD-JME'
+    add_tag = '_Herwig-TTBAR-JME'
     
     xrootdstr = 'root://xrootd-cms.infn.it/'
     
@@ -58,6 +58,7 @@ def main():
         
     dataset = 'fileNames/fileNames_TTToSemi20UL18_JMENano.txt'
     dataset = 'fileNames/fileNames_QCD20UL18_JMENano.txt'
+    dataset = 'fileNames/fileNames_TT20UL18_JMENano_Herwig.txt'
     
     with open(dataset) as f:
         rootfiles = f.read().split()
@@ -173,7 +174,7 @@ def main():
     
             cluster = CernCluster(
                 env_extra=env_extra,
-                cores = 4,
+                cores = 1,
                 memory = '4000MB',
                 disk = '2000MB',
                 death_timeout = '60',
@@ -190,7 +191,7 @@ def main():
                     'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
                 },
             )
-            cluster.adapt(minimum=2, maximum=50)
+            cluster.adapt(minimum=2, maximum=200)
             cluster.scale(8)
             client = Client(cluster)
         
@@ -205,7 +206,7 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    Chunk = [10000, 5] # [chunksize, maxchunks]
+    Chunk = [100000, 5] # [chunksize, maxchunks]
     
     if not load_preexisting:
         if not UsingDaskExecutor:
@@ -451,9 +452,9 @@ def main():
             response_hist = output['ptresponse'+'_'+samp] + output['ptresponse'+'_'+samp+'bar']
             recopt_hist = output['reco_pt_sumwx'+'_'+samp] + output['reco_pt_sumwx'+'_'+samp+'bar']
         elif samp == 'all':
-            all_responses = {key:output[key] for key in output.keys() if 'ptresponse' in key}
+            all_responses = {key:output[key] for key in output.keys() if 'ptresponse' in key and not 'untagged' in key}
             response_hist = sum(all_responses.values())
-            all_reco_pts = {key:output[key] for key in output.keys() if 'reco_pt_sumwx' in key}
+            all_reco_pts = {key:output[key] for key in output.keys() if 'reco_pt_sumwx' in key and not 'untagged' in key}
             recopt_hist = sum(all_reco_pts.values())
         else:
             response_hist = output['ptresponse'+'_'+samp]
@@ -693,8 +694,8 @@ def main():
     medianstds = []
     
     combine_antiflavour = True
-    subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar']
-    subsamples = ['all', 'b', 'bbar']
+    subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar', 'all']
+#     subsamples = ['all', 'b', 'bbar']
     for samp in subsamples:
         print('-'*25)
         print('-'*25)
