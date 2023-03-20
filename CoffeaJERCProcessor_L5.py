@@ -6,7 +6,7 @@ from memory_profiler import profile
 # print(h.heap())
 
 import sys
-# sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/coffea')
+sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/coffea')
 # sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
 sys.path
 
@@ -19,7 +19,7 @@ from coffea import processor, nanoevents
 from coffea import util
 import numpy as np
 import pandas as pd
-from coffea.jetmet_tools import JetCorrectionUncertainty # FactorizedJetCorrector
+# from coffea.jetmet_tools import JetCorrectionUncertainty # FactorizedJetCorrector
 from coffea.jetmet_tools import JECStack, CorrectedJetsFactory
 from coffea.lookup_tools import extractor
 
@@ -115,11 +115,11 @@ class Processor(processor.ProcessorABC):
         
         self.jet_factory = CorrectedJetsFactory(self.name_map, jec_stack)
 
-        df_csv = pd.read_csv('out_txt/Closure_L5_QCD_Pythia.coffea').set_index('etaBins')
-        self.closure_corr = df_csv.to_numpy().transpose()
-        self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
-        self.etabins_closure = df_csv.index.to_numpy()
-        self.ptbins_closure = df_csv.columns.to_numpy('float')
+#        df_csv = pd.read_csv('out_txt/Closure_L5_QCD_Pythia.coffea').set_index('etaBins')
+#        self.closure_corr = df_csv.to_numpy().transpose()
+#        self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
+#        self.etabins_closure = df_csv.index.to_numpy()
+#        self.ptbins_closure = df_csv.columns.to_numpy('float')
         
 #         ### Uncomment to set closure as 1
 #         self.closure_corr = np.ones(self.closure_corr.shape)
@@ -137,7 +137,7 @@ class Processor(processor.ProcessorABC):
     def process(self, events):
         
         subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar', 'untagged']
-        flavour_axis = hist.axis.StrCategory(subsamples, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of subsamples. See, https://github.com/CoffeaTeam/coffea/discussions/705
+        # flavour_axis = hist.axis.StrCategory(subsamples, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of subsamples. See, https://github.com/CoffeaTeam/coffea/discussions/705
         pt_gen_axis = hist.axis.Variable(ptbins, name="pt_gen", overflow=True, underflow=True, label=r"$p_{T,gen}$")
 #         pt_reco_axis = hist.axis.Variable(ptbins, name="pt_reco", overflow=True, underflow=True, label=r"$p_{T,reco}$")
         ptresponse_axis = hist.axis.Regular( 100, 0, 2.5, overflow=True, underflow=True, name="ptresponse", label="RECO / GEN response")
@@ -152,7 +152,7 @@ class Processor(processor.ProcessorABC):
 #         output['ptresponse'] = hist.Hist(flavour_axis,
 #                                             pt_gen_axis, ptresponse_axis, jeteta_axis,
 #                                             storage="weight", name="Counts")
-        self.for_memory_testing()
+#         self.for_memory_testing()
         ### Store only the sums of values. Much simpler than storing the whole reco_pt histogram
         for samp in subsamples:
             output['reco_pt_sumwx_'+samp] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
@@ -235,8 +235,9 @@ class Processor(processor.ProcessorABC):
         selected_jets = jets[jet_mask]
         output['cutflow'].fill(cutflow='gen_matched+no_dressed_lep', weight=ak.sum(ak.num(selected_jets)))
 
-
-        jet_pt_mask = selected_jets.matched_gen.pt>20
+        ## select only the first three jets on QCD samples to avoid effects due to a non-physical jet spectrum 
+        selected_jets = selected_jets #[:,0:3]
+        jet_pt_mask = selected_jets.matched_gen.pt>15
         ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
         ## otherwise after the correction .matched_gen field is not found.
         jet_pt_mask_shape = ak.num(jet_pt_mask)
@@ -245,7 +246,7 @@ class Processor(processor.ProcessorABC):
         sel_jets = selected_jets[jet_pt_mask]
         
                                
-        output['cutflow'].fill(cutflow='jetpt>20', weight=ak.sum(ak.num(sel_jets)))
+        output['cutflow'].fill(cutflow='jetpt>15', weight=ak.sum(ak.num(sel_jets)))
         
         
                 # Cut on overlapping jets
@@ -335,42 +336,36 @@ class Processor(processor.ProcessorABC):
                 b_criteria_unknown = ak.flatten(bbar_criteria & b_criteria).to_numpy()
                 LHE_flavour_np[b_criteria_unknown] = 0
 
-                reco_jets["LHE_Flavour"] = ak.unflatten(LHE_flavour_np, jet_shape)
-
-
-                # jetpt = jets.pt
-        # corrected_jetpt = corrected_jets.pt
-
-#         # Recalculate the MC jet matching
-#         matchedJets = ak.cartesian([gen_jets, corrected_jets])
-#         deltaR = matchedJets.slot0.delta_r(matchedJets.slot1)
-#         matchedJets = matchedJets[deltaR < 0.2]
-#         matchedJets = matchedJets[ak.num(matchedJets) > 0]
-
-#         gen_jets = matchedJets.slot0
-#         reco_jets = matchedJets.slot1        
+                reco_jets["LHE_Flavour"] = ak.unflatten(LHE_flavour_np, jet_shape)    
     
         gen_jets = gen_jets
         reco_jets = reco_jets         
         
+        shapes_jets = ak.num(gen_jets.pt) #for event weights
         gen_jetpt  = ak.flatten(gen_jets.pt).to_numpy( allow_missing=True)
         gen_jeteta = ak.flatten(gen_jets.eta).to_numpy( allow_missing=True)
         jetpt      = ak.flatten(reco_jets.pt).to_numpy( allow_missing=True)
         jeteta     = ak.flatten(reco_jets.eta).to_numpy( allow_missing=True)
         
-        etabins_abs = etabins[(len(etabins)-1)//2:] ##the positive eta bins
+        # etabins_abs = etabins[(len(etabins)-1)//2:] ##the positive eta bins
         ptresponse_np = jetpt / gen_jetpt
-        correction_pos_pt = (len(self.ptbins_closure)
-                              - np.count_nonzero(np.array(gen_jetpt, ndmin=2).transpose() < self.ptbins_closure, axis=1))
-        correction_pos_eta = (len(self.etabins_closure)
-                              - np.count_nonzero(np.abs(np.array(gen_jeteta, ndmin=2).transpose()) < self.etabins_closure, axis=1))
+        # correction_pos_pt = (len(self.ptbins_closure)
+        #                       - np.count_nonzero(np.array(gen_jetpt, ndmin=2).transpose() < self.ptbins_closure, axis=1))
+        # correction_pos_eta = (len(self.etabins_closure)
+        #                       - np.count_nonzero(np.abs(np.array(gen_jeteta, ndmin=2).transpose()) < self.etabins_closure, axis=1))
         
-        ptresponse_np = jetpt / gen_jetpt / self.closure_corr[correction_pos_pt, correction_pos_eta]
+        ptresponse_np = jetpt / gen_jetpt #/ self.closure_corr[correction_pos_pt, correction_pos_eta]
         
         jet_flavour = reco_jets.partonFlavour
 #         jet_flavour = reco_jets.LHE_Flavour2
 #         jet_flavour = reco_jets.LHE_Flavour
         
+        try:
+            weights = selectedEvents.LHEWeight.originalXWGTUP
+        except AttributeError: ### no LHEWeight.originalXWGTUP in madgraph herwig but Generator.weight instead
+            weights = selectedEvents.Generator.weight
+    
+        weights2 = np.repeat(weights, shapes_jets)
         subsamples = self.subsamples
         masks = {}
         masks['b'] = ak.flatten((jet_flavour==5)).to_numpy( allow_missing=True)
@@ -392,6 +387,7 @@ class Processor(processor.ProcessorABC):
         gen_jetpts      = { sample: gen_jetpt[masks[sample]]            for sample in subsamples }
         gen_jetetas     = { sample: gen_jeteta[masks[sample]]           for sample in subsamples }
         jetpts          = { sample: jetpt[masks[sample]]                for sample in subsamples }
+        weights_jet     = { sample: weights2[masks[sample]]             for sample in subsamples }
 
         # print("Try to np:")
         # ak.flatten(gen_jetpt).to_numpy()
@@ -405,19 +401,19 @@ class Processor(processor.ProcessorABC):
 #                                                    jeteta=gen_jeteta,
 #                                                    ptresponse=ptresponse_np)
         for sample in subsamples:
-               output['ptresponse_'+sample].fill(pt_gen=gen_jetpts[sample],
-                                    jeteta=gen_jetetas[sample],
-                                    ptresponse=ptresponses[sample])
+            output['ptresponse_'+sample].fill(pt_gen=gen_jetpts[sample],
+                                              jeteta=gen_jetetas[sample],
+                                              ptresponse=ptresponses[sample],
+#                                               weight=weights_jet[sample]
+                                             )
+            
+            output['reco_pt_sumwx_'+sample].fill(pt_gen=gen_jetpts[sample],
+                                                 jeteta=gen_jetetas[sample],
+                                                 weight=jetpts[sample] #*weights_jet[sample]
+                                                )
+#         self.for_memory_testing()
 
-#         output['reco_pt_sumwx'].fill(pt_gen=gen_jetpt,
-#                                        jeteta=gen_jeteta, weight=np.sum(jetpts))
-  
-        for sample in subsamples:
-               output['reco_pt_sumwx_'+sample].fill(pt_gen=gen_jetpts[sample],
-                                    jeteta=gen_jetetas[sample], weight=jetpts[sample])
-        self.for_memory_testing()
-
-        return output
+        return {dataset: output}
 
     def postprocess(self, accumulator):
         return accumulator
