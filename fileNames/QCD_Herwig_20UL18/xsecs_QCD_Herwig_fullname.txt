@@ -1,0 +1,9 @@
+QCD_HT50to100_TuneCH3_13TeV-madgraphMLM-herwig7 56530.0	
+QCD_HT100to200_TuneCH3_13TeV-madgraphMLM-herwig7 11370.0
+QCD_HT200to300_TuneCH3_13TeV-madgraphMLM-herwig7 883.5
+QCD_HT300to500_TuneCH3_13TeV-madgraphMLM-herwig7 259.6
+QCD_HT500to700_TuneCH3_13TeV-madgraphMLM-herwig7 23.63
+QCD_HT700to1000_TuneCH3_13TeV-madgraphMLM-herwig7 4.943
+QCD_HT1000to1500_TuneCH3_13TeV-madgraphMLM-herwig7 0.8013
+QCD_HT1500to2000_TuneCH3_13TeV-madgraphMLM-herwig7 0.06815
+QCD_HT2000toInf_TuneCH3_13TeV-madgraphMLM-herwig7 0.01245
