@@ -31,9 +31,9 @@ Clone the repo
 ```
 git clone git@github.com:AndrissP/JMECoffea.git
 ```
-Run the histogram creation and responce fitting code by the following `CoffeaJERC-Andris.ipynb` or running
+Run the histogram creation and responce fitting code by the following `run_processor_response_fitter.ipynb` or running
 ```
-python CoffeaJERC-Andris.py
+python run_processor_response_fitter.py
 ```
 
 ### Fitting respponses and creating output txt files
