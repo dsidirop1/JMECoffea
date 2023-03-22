@@ -7,29 +7,14 @@ LINES=$(cat $in_file)
 
 for FILE in $LINES
 do
-	site_aliases=$(dasgoclient -query="site file=$FILE")
-	correct_alias=
-
-	if [[ $(echo ${site_aliases} | head -n 1 )  = WARNING* ]] ; then
+   site_alias=$(dasgoclient -query="site file=$FILE" | head -n 1)
+	if [[ $outp = WARNING* ]] ; then
      echo "Discarded file = " $FILE
 	else
-		for site_alias in ${site_aliases}
-		do 
-			echo Checking alias ${site_alias}
-			if [[ ${site_alias} != *_Disk ]] && [[ ${site_alias} != *_Tape ]]; then
-				echo alias is good
-				correct_alias=${site_alias}
-				break
-			fi
-		done
-
-		if [[ -z "$correct_alias" ]]; then
-			echo "Only on disk. Discarding file = " $FILE
-			break
-		fi
-		redirector=$(python GetSiteInfo.py ${correct_alias} | grep XROOTD | tr -s ' ' | awk '{ print $NF }')
+		redirector=$(python GetSiteInfo.py ${site_alias} | grep XROOTD | tr -s ' ' | cut -d ' ' -f 3)
+		# redirector=${redirector%?}
 		full_name=${redirector}//${FILE}
-		echo file = ${FILE}, site = ${correct_alias}, redirector = ${redirector}
+		#echo file = ${FILE}, site = ${site_alias}, redirector = ${redirector}
 		#echo full name =  $full_name
 		echo $full_name >> $out_file
 	fi
