@@ -2,7 +2,7 @@
     # coding: utf-8
 ### run_processor_response_fitter.py
 ### File automatically converted using ConvertJupyterToPy.ipynb from run_processor_response_fitter.ipynb
-### No comments or formatting is preserved by the transfer.
+### Formatting or commets may not be preserved by the conversion.
 def main():
     
     # ### Imports
@@ -28,7 +28,8 @@ def main():
     import hist
     
     from plotters.pltStyle import pltStyle
-    pltStyle(style='paper')
+    pltStyle(style='hep')
+    # pltStyle(style='paper')
     plt.rcParams['figure.dpi'] = 150
     import os
     
@@ -36,14 +37,15 @@ def main():
     from helpers import hist_add, hist_mult, hist_div, dictionary_pattern, sum_subhist, xsecstr2float
     from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors
     from plotters.plotters import plot_response_dist, plot_corrections, plot_corrections_eta
+    
+    from helpers import rebin_hist, mirror_eta_to_plus, sum_neg_pos_eta
     # %matplotlib notebook 
     
     # ### Parameters of the run
-    
-    UsingDaskExecutor = False
-    CERNCondorCluster = False
+    UsingDaskExecutor = True
+    CERNCondorCluster = True
     CoffeaCasaEnv     = False
-    load_preexisting  = True    ### True if don't repeat the processing of files and use preexisting JER from output
+    load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False   ### True if run only on one file and five chuncs to debug processor
     load_fit_res      = False   ### True if only replot the fit results
     
@@ -55,20 +57,38 @@ def main():
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
     ### tag for the dataset used
-    data_tag = 'QCD_MG_Py8' #'_LHEflav1_TTBAR-JME' #'_LHEflav1_TTBAR-Summer16-cFlip'
+    data_tag = 'Herwig-TTBAR' #'_LHEflav1_TTBAR-JME' #'_LHEflav1_TTBAR-Summer16-cFlip'
+    # data_tag = 'Herwig-TTBAR'
     ### name of the specific run if parameters changed
     add_tag = ''  
-    # add_tag='_fine_etaBins'+add_tag
-    # add_tag = '_Herwig-QCD' #-etaAut18'
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
     # ### Dataset parameters
     
-    dataset = 'fileNames/TTToSemi20UL18_JMENano.txt'
-    dataset = 'fileNames/QCD20UL18_JMENano.txt'
-    dataset = 'fileNames/QCD_Herwig_20UL18/xsecs_QCD_Herwig_corrected.txt'
-    # dataset = 'fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt'
+    dataset = None
+    fileslist = None
+    
+    dataset_dictionary = {
+        "Pythia-TTBAR": 'fileNames/TTToSemi20UL18_JMENano.txt',
+        "Herwig-TTBAR": 'fileNames/TTbar_Herwig_20UL18_JMENano.txt',
+        "DY-MG-Py":     'fileNames/DYJets_MG-Py.txt',
+        "DY-MG-Her":    'fileNames/DYJets_MG-Her.txt',
+        "QCD-MG-Py":    'fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt',
+        "QCD-MG-Her":   'fileNames/QCD_Herwig_20UL18/xsecs_QCD_Herwig_corrected.txt',
+        "QCD-Py":       'fileNames/QCD20UL18_JMENano.txt',
+        "DY-FxFx":      'fileNames/DYJets.txt',
+    }
+    
+    if not (fileslist is None):
+        print(f'A specific filelist specified. The calculation will be run on the files {fileslist}')
+    elif data_tag in dataset_dictionary.keys():
+        dataset = dataset_dictionary[data_tag]
+        print(f'The data tag "{data_tag}" found in the dataset_dictionary. The dataset "{dataset}" will be used.')
+    elif not(dataset is None):
+        print(f'Using the provided dataset "{dataset}" and the data tag "{data_tag}".')
+    else:
+        raise ValueError(f'The data tag "{data_tag}" not found in the dataset_dictionary and no dataset provided.')
     
     ### Choose the correct redirector
     ## assume running on the LPC
@@ -80,12 +100,6 @@ def main():
     # if running on coffea casa instead...
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
-    
-    #### If manyally adding fileslist
-    # fileslist = ['root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/20000/8033E2A6-04CC-2A4B-9636-BF2A51214156.root', #good file
-    #              'root://cms-xrd-global.cern.ch///store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/55E72333-8846-D040-90FF-266FCA3EF67B.root', #bad file
-    #              'root://grid-dcache.physik.rwth-aachen.de:1094////store/mc/RunIISummer16NanoAODv7/TT_TuneCUETP8M2T4_13TeV-powheg-colourFlip-pythia8/NANOAODSIM/PUMoriond17_Nano02Apr2020_102X_mcRun2_asymptotic_v8_ext1-v1/230000/E6694A4B-483C-BB42-AC66-187B1FE69CCF.root' #bad file2
-    #             ] 
     
     #Import the correct processor
     Processor = importlib.import_module('CoffeaJERCProcessor'+tag_Lx).Processor
@@ -124,11 +138,11 @@ def main():
         os.mkdir("test/out_txt")
         os.mkdir("test/fig")
         
-    maxchunks = 5 if test_run else None
+    maxchunks = 2 if test_run else None
     if test_run:
         Nfiles = 1
     
-    print(f'Runing on dataset {dataset}\n Number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}')
+    print(f'Running on the number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}')
     
     # ### For the attempt to correctly combine three ttbar channels. Not fully tested
     
@@ -139,21 +153,19 @@ def main():
         return fileslist
     
     combineTTbar = False
-    
-    # datasets = ['fileNames/fileNames_TTToSemi20UL18_JMENano.txt',
-    #            'fileNames/fileNames_TTToDilep20UL18_JMENano.txt',
-    #            'fileNames/fileNames_TTToHad20UL18_JMENano.txt'
-    #            ]
     ttbar_tags = ['Semi', 'Dilep', 'Had']
     
     filesets = {}
-    if combineTTbar:
+    if not (fileslist is None):
+        xsec_dict = {'dataset1': 1}
+        filesets = {'dataset1': {"files": fileslist, "metadata": {"xsec": 1}}}
+    elif combineTTbar:
         for ftag in ttbar_tags:
             data_name = f'fileNames/fileNames_TTTo{ftag}20UL18_JMENano.txt'
             fileslist = txt2filesls(data_name)[:Nfiles]
             xsec = find_ttbar_xsec(data_name)
             filesets[ftag] = {"files": fileslist, "metadata": {"xsec": xsec}}
-    elif 'Herwig-QCD' in data_tag or "MG" in data_tag:
+    elif "QCD-MG" in data_tag:
         ### if dataset striched together from a set of datasets where the cross-section for each is given in `dataset`
         dataset_path = '/'.join(dataset.split('/')[:-1])
         with open(dataset) as f:
@@ -169,6 +181,7 @@ def main():
             filesets = {key: filesets[key] for key in list(filesets.keys())[:3]}      
     else:
         fileslist = txt2filesls(dataset)[:Nfiles]
+        #### If manyally adding fileslist
         xsec_dict = {'dataset1': 1}
         filesets = {'dataset1': {"files": fileslist, "metadata": {"xsec": 1}}}
     
@@ -176,6 +189,8 @@ def main():
     ff = uproot.open(fileslist[0])
     ff.keys()
     ff.close()
+    
+    # print(f"The test file read successfully. All good with certifiates.")
     
     # # Dask Setup:
     # ---
@@ -244,7 +259,7 @@ def main():
             cluster.scale(8)
             client = Client(cluster)
         
-        client.upload_file('CoffeaJERCProcessor'+tag+'.py')
+        client.upload_file('CoffeaJERCProcessor'+tag_Lx+'.py')
         client.upload_file('count_2d.py')
     
         client
@@ -258,6 +273,7 @@ def main():
     seed = 1234577890
     prng = RandomState(seed)
     chunksize = 10000
+    # maxchunks = 20
     
     if not load_preexisting:
         if not UsingDaskExecutor:
@@ -307,21 +323,16 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
-    # output_orig['HT50to100']['cutflow']*scale_factors['HT50to100'] + output_orig['HT100to200']['cutflow']*scale_factors['HT100to200']
-    
-    # output = util.load('out/CoffeaJERCOutputs_L5_QCD-JME.coffea_test')
-    # output['cutflow']
-    
     # ### Striching up the sample
     
     output_orig = output
-    if 'Herwig-QCD' in data_tag or "MG" in data_tag:
+    if "QCD-MG" in data_tag:
         response_sums = {key:sum(dictionary_pattern(output[key], "ptresponse_").values()).sum().value for key in output.keys()}
         scale_factors = hist_div(xsec_dict, response_sums)
         all_histo_keys = output[next(iter(output.keys()))].keys()
         result = {histo_key:sum_subhist(output, histo_key, scale_factors) for histo_key in all_histo_keys }
         output = result
-    else:
+    elif len(output.keys())==1:
         output = output[list(output.keys())[0]]
     
     # ### Fit responses
@@ -344,7 +355,7 @@ def main():
     elif one_bin==True:
         ptbins = np.array([15, 10000])
         ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-        etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
+    #     etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
         etabins = np.array([etabins[0], 0, etabins[-1]])
     #     etabins = np.array([etabins[3], 0, etabins[-4]])
     else:
@@ -352,7 +363,8 @@ def main():
     #     ptbins = ptbins[2:] #because there is a pt cut on pt gen and no point of fitting and plotting below that
         ptbins_c = output[response_key].axes['pt_gen'].centers
         etabins = np.array([-5.191, -3.489, -3.139, -2.853,   -2.5, -2.322,  -1.93, -1.653, -1.305, -0.783,      0,  0.783,  1.305,  1.653,   1.93,  2.322,    2.5,  2.853,  3.139,  3.489, 5.191])
-        etabins = np.array([-5.191, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5.191])
+    #     etabins = np.array([-5.191, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5.191])
+        etabins = np.array([-5.191, -3.139, -2.5, -1.305, 0., 1.305, 2.5, 3.139, 5.191])
         
     
         
@@ -475,6 +487,14 @@ def main():
         saveplots = False
             
         response_hist, recopt_hist = add_flavors(output, flavor, combine_antiflavour)
+        
+        response_hist = rebin_hist(response_hist, 'jeteta' , etabins)
+        recopt_hist = rebin_hist(recopt_hist, 'jeteta' , etabins)
+        
+        sum_neg_pos_eta_bool=True
+        if sum_neg_pos_eta_bool==True:
+            response_hist = sum_neg_pos_eta(response_hist)
+            recopt_hist = sum_neg_pos_eta(recopt_hist)
             
         results = {key:np.zeros((jetpt_length, jeteta_length))
                       for key in ["Mean", "MeanVar", "Median", "MedianStd", "MeanRecoPt"]  }
@@ -508,7 +528,15 @@ def main():
                 pt_string = pt_string.replace('.0','').replace('-infto','0to')
     
             for k in range(jeteta_length):
-                histo, histopt, eta_string = slice_histogram(response_hist, recopt_hist, etabins, k, pt_lo, pt_hi)
+                histo = response_hist[i, :, k]
+                histopt = recopt_hist[i, k]
+                
+                etaPl_lo = etabins[k+jeteta_length]
+                etaPl_hi = etabins[k+1+jeteta_length]
+                eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
+                eta_string = eta_string.replace('.','')
+                
+    #             histo, histopt, eta_string = slice_histogram(response_hist, recopt_hist, etabins, k, pt_lo, pt_hi)
                 yvals = histo.values()[1:]     #[1:] to exclude the second peak for low pt
                 try:
                     Neff = histo.sum().value**2/(histo.sum().variance)
@@ -556,10 +584,10 @@ def main():
     combine_antiflavour = True
     # subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
     # subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar', 'q', 'qbar', 'ud', 'udbar']
-    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'untagged']
+    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'unmatched']
     # subsamples = ['all', 'b', 'bbar', 'untagged', 'q', 'ud', 'q', 'ud']
     # subsamples = ['b']
-    # subsamples = ['untagged']
+    # flavors = ['unmatched']
     print('-'*25)
     print('-'*25)
     print(f'Starting to fit each flavor in: {flavors}')
@@ -581,15 +609,16 @@ def main():
                 save_data(result[key], key, flav, tag_full, ptbins, etabins_mod)
                 pass
                 
+    #     print("result = ", result)
         median = result["Median"]
         medianStd = result["MedianStd"]
         
         meanstd = np.sqrt(result["MeanVar"])
                 
         if one_bin: #or fine_etabins:
-            plot_corrections_eta(result["Median"], result["MedianStd"], flav)
+            plot_corrections_eta(result["Median"], result["MedianStd"], ptbins, etabins_c, tag_full, flav)
         else:
-            plot_corrections(result["Median"], result["MedianStd"], ptbins_c, etabins_mod, flav+tag_full)
+            plot_corrections(result["Median"], result["MedianStd"], ptbins_c, etabins_mod, tag_full, flav)
     
     print('-----'*10)
     print("All done. Congrats!")
