@@ -2,22 +2,6 @@ import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
 from cycler import cycler
 
-#fsize = 15
-#tsize = 18tdir = 'in'major = 5.0
-#minor = 3.0lwidth = 0.8
-#lhandle = 2.0plt.style.use('default')
-#plt.rcParams['text.usetex'] = True
-#plt.rcParams['font.size'] = fsize
-#plt.rcParams['legend.fontsize'] = tsize
-#plt.rcParams['xtick.direction'] = tdir
-#plt.rcParams['ytick.direction'] = tdir
-#plt.rcParams['xtick.major.size'] = major
-#plt.rcParams['xtick.minor.size'] = minor
-#plt.rcParams['ytick.major.size'] = 5.0
-#plt.rcParams['ytick.minor.size'] = 3.0
-#plt.rcParams['axes.linewidth'] = lwidth
-#plt.rcParams['legend.handlelength'] = lhandle
-
 # colour bling colors = [#00429d,#394c99,#545793,#686867,#737373,#df4639,#d76132,#ce7628,#c3891b,#b89a00]
 colourblind_cols = ["#920000", "#006ddb", "#24ff24","#db6d00",
                     "#004949","#b66dff","#b6dbff","#924900",
@@ -36,8 +20,38 @@ def pltStyle(style='paper'):
     plt.style.use('default')
     plt.style.use('seaborn-paper')
     cols_cyc = cycler(color=colourblind_cols)
+    markers_cyc = cycler(marker=['o','s', 'p','d', 'D', 'H', '^']*2+['v'])
 
-    if style=='paper':
+    if style=='hep':
+        import mplhep as hep
+        hep.style.use("CMS")
+        plt.rc('font', family='serif')
+
+        ### make the size of the plot size_frac x smaller, but keep all the sizes relativelly the same
+        size_frac = 2.5
+        hep_parms = plt.rcParams
+        plt.rcParams['figure.figsize'] = [hep_parms['figure.figsize'][i]/size_frac for i in range(2)]
+        plt.rcParams['font.size'] = hep_parms['font.size']/size_frac*1.2
+        plt.rcParams['xtick.major.size'] = plt.rcParams['ytick.major.size'] = hep_parms['xtick.major.size']/size_frac
+        plt.rcParams['xtick.minor.size'] = plt.rcParams['ytick.minor.size'] = hep_parms['xtick.minor.size']/size_frac
+        plt.rcParams['legend.borderpad'] = hep_parms['legend.borderpad']/size_frac
+        plt.rcParams['legend.handlelength'] = hep_parms['legend.handlelength']/size_frac
+        plt.rcParams['xtick.major.pad'] = plt.rcParams['ytick.major.pad'] = hep_parms['xtick.major.pad']/size_frac
+        plt.rcParams['axes.labelpad'] = hep_parms['axes.labelpad']/size_frac
+        plt.rcParams['lines.markersize'] = hep_parms['lines.markersize']/size_frac*2
+        plt.rcParams['xtick.major.width'] = hep_parms['xtick.major.width']/size_frac*2
+        plt.rcParams['xtick.minor.width'] = hep_parms['xtick.minor.width']/size_frac*2
+        plt.rcParams['ytick.major.width'] = hep_parms['ytick.major.width']/size_frac*2
+        plt.rcParams['ytick.minor.width'] = hep_parms['ytick.minor.width']/size_frac*2
+        plt.rcParams['axes.linewidth'] = hep_parms['axes.linewidth']/size_frac
+        plt.rcParams['legend.labelspacing'] = hep_parms['legend.labelspacing']/size_frac
+        plt.rcParams['legend.columnspacing'] =  hep_parms['legend.columnspacing']/size_frac
+
+        plt.rcParams['lines.markeredgewidth']=0
+        plt.rcParams['axes.prop_cycle'] = cols_cyc+markers_cyc
+
+
+    elif style=='paper':
         ### For paper - one smaller image full page
 
         plt.rcParams['figure.figsize'] = [4.2, 2.8]  #Latex text width =0.7*page width = 8.2 inches
@@ -56,7 +70,8 @@ def pltStyle(style='paper'):
         plt.rcParams['figure.subplot.bottom'] = 0.13
         plt.rcParams['figure.subplot.right'] = 0.97
         plt.rcParams['figure.subplot.left'] = 0.162
-        plt.rcParams['axes.prop_cycle'] = cols_cyc
+#         plt.rcParams['markeredgewidth']=1
+        plt.rcParams['axes.prop_cycle'] = cols_cyc+markers_cyc
         
 #    if style=='paperTwoCols':
 #        ### For paper - one smaller image full page

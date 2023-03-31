@@ -1,6 +1,98 @@
 import pandas as pd
 import numpy as np
 
+def rebin_hist(h, axis_name, edges):
+    '''Stolen from Kenneth Long
+    https://gist.github.com/kdlong/d697ee691c696724fc656186c25f8814
+    '''
+    if type(edges) == int:
+        return h[{axis_name : hist.rebin(edges)}]
+
+    ax = h.axes[axis_name]
+
+    if len(ax.edges)==len(edges) and (ax.edges == edges).all():
+        return h
+
+    ax_idx = [a.name for a in h.axes].index(axis_name)
+    if not all([np.isclose(x, ax.edges).any() for x in edges]):
+        raise ValueError(f"Cannot rebin histogram due to incompatible edges for axis '{ax.name}'\n"
+                            f"Edges of histogram are {ax.edges}, requested rebinning to {edges}")
+        
+    # If you rebin to a subset of initial range, keep the overflow and underflow
+    overflow = ax.traits.overflow or (edges[-1] < ax.edges[-1] and not np.isclose(edges[-1], ax.edges[-1]))
+    underflow = ax.traits.underflow or (edges[0] > ax.edges[0] and not np.isclose(edges[0], ax.edges[0]))
+    flow = overflow or underflow
+    new_ax = hist.axis.Variable(edges, name=ax.name, overflow=overflow, underflow=underflow)
+    axes = list(h.axes)
+    axes[ax_idx] = new_ax
+    
+    hnew = hist.Hist(*axes, name=h.name, storage=h.storage_type())
+
+    # Offset from bin edge to avoid numeric issues
+    offset = 0.5*np.min(ax.edges[1:]-ax.edges[:-1])
+    edges_eval = edges+offset
+    edge_idx = ax.index(edges_eval)
+    # Avoid going outside the range, reduceat will add the last index anyway
+    if edge_idx[-1] == ax.size+ax.traits.overflow:
+        edge_idx = edge_idx[:-1]
+
+    if underflow:
+        # Only if the original axis had an underflow should you offset
+        if ax.traits.underflow:
+            edge_idx += 1
+        edge_idx = np.insert(edge_idx, 0, 0)
+
+    # Take is used because reduceat sums i:len(array) for the last entry, in the case
+    # where the final bin isn't the same between the initial and rebinned histogram, you
+    # want to drop this value. Add tolerance of 1/2 min bin width to avoid numeric issues
+    hnew.values(flow=flow)[...] = np.add.reduceat(h.values(flow=flow), edge_idx, 
+            axis=ax_idx).take(indices=range(new_ax.size+underflow+overflow), axis=ax_idx)
+    if hnew.storage_type() == hist.storage.Weight():
+        hnew.variances(flow=flow)[...] = np.add.reduceat(h.variances(flow=flow), edge_idx, 
+                axis=ax_idx).take(indices=range(new_ax.size+underflow+overflow), axis=ax_idx)
+    return hnew
+
+
+def mirror_eta_to_plus(h):
+    ''' Mirror negative eta bins in histogram to positive eta bins
+    '''
+    axis_name = 'jeteta'
+    ax = h.axes[axis_name]
+    ax_idx = [a.name for a in h.axes].index(axis_name)
+
+    overflow = ax.traits.overflow
+    underflow = ax.traits.underflow
+    flow = overflow or underflow
+    new_eta_edges = h.axes[ax_idx].edges[::-1]*(-1)
+    #     if (new_eta_edges>0).any() and (new_eta_edges<0).any():
+    #         Maybe a bug?
+    new_ax = hist.axis.Variable(new_eta_edges, name=ax.name, overflow=overflow, underflow=underflow)
+    axes = list(h.axes)
+    axes[ax_idx] = new_ax
+
+    hnew = hist.Hist(*axes, name=h.name, storage=h.storage_type())
+
+    hnew.values(flow=flow)[...]=np.flip(h.values(flow=flow),axis=ax_idx)
+    if hnew.storage_type() == hist.storage.Weight():
+        hnew.variances(flow=flow)[...] = np.flip(h.variances(flow=flow),axis=ax_idx)
+    return hnew
+
+def sum_neg_pos_eta(hist):
+    eta_edges = [ax.edges for ax in hist.axes if 'jeteta' in ax.name ][0]
+    # ed = response_hist.axes.edges[0]
+    edPl = eta_edges[eta_edges>=0]
+    edMi = eta_edges[eta_edges<=0]
+
+    hist_Pl = rebin_hist(hist, 'jeteta', edPl)
+    hist_Mi = rebin_hist(hist, 'jeteta', edMi)
+
+    hist_MiPl = mirror_eta_to_plus(hist_Mi)
+    return hist_MiPl+hist_Pl
+
+
+################ Dictionary sum helper functions #######################
+# Why isn't anything like this implemented in Python itself?
+
 def dictionary_pattern(dictionary, pattern):
     "skim the histogram with keys mathing the pattern"
     return {key:dictionary[key] for key in dictionary.keys() if pattern in key}
@@ -13,9 +105,13 @@ def hist_add(hist1, hist2):
     check_hist_values(hist1, hist2)
     return {key:(hist1[key]+hist2[key]) for key in hist1.keys()}
 
+
 def hist_mult(hist1, hist2):
-    check_hist_values(hist1, hist2)
-    return {key:(hist1[key]*hist2[key]) for key in hist1.keys()}
+    if type(hist2)==dict:
+        check_hist_values(hist1, hist2)
+        return {key:(hist1[key]*hist2[key]) for key in hist1.keys()}
+    else:
+        return {key:(hist1[key]*hist2) for key in hist1.keys()}
 
 def hist_div(hist1, hist2):
     check_hist_values(hist1, hist2)
@@ -29,6 +125,7 @@ def sum_subhist(output, histo_key, scales):
         new_hist += output[sample_key][histo_key]*scales[sample_key]
     return new_hist
 
+
 def save_data(data, name, flavor, tag, ptbins, etabins):
     data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins[:-1])}
     data_dict['etaBins'] = np.array([str(etaBin) for etaBin in etabins[:-1]])
@@ -37,8 +134,8 @@ def save_data(data, name, flavor, tag, ptbins, etabins):
     df = df.set_index('etaBins')
     df.to_csv('out_txt/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
 
-def read_data(name, flavor, tag):
-    df_csv = pd.read_csv('out_txt/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv').set_index('etaBins')
+def read_data(name, flavor, tag, rel_path=''):
+    df_csv = pd.read_csv(rel_path+'out_txt/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv').set_index('etaBins')
     return df_csv.to_numpy().transpose()
 
 def xsecstr2float(str_input):
@@ -71,6 +168,7 @@ def find_ttbar_xsec(key):
     else:
         xsec = 1
     return xsec
+
 
 def get_median(xvals, yvals, bin_edges, Neff):
     ''' Calculate median and median error (assuming Gaussian distribution).

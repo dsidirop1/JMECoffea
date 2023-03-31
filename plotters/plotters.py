@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
+import os
 
-def plot_corrections(mean, meanstd, ptbins_c, etabins, savename):
+def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor):
 
     ### To ignore the points with 0 on y axis when setting the y axis limits
     mean_p = mean.copy()
@@ -13,9 +14,9 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, savename):
     
     #### four different eta bins to plot
     k2 = np.where(etabins<=0)[0][-1]
-    k4 = np.where(etabins<=1.3)[0][-1]
+    k4 = np.where(etabins<=1.305)[0][-1]
     k6 = np.where(etabins<=2.5)[0][-1]
-    k8 = np.where(etabins<=3.0)[0][-1]
+    k8 = np.where(etabins<=3.139)[0][-1]
 #     lastbin = np.where(~ np.isnan(mean_p[:, k2]*mean_p[:, k4]*mean_p[:, k6]*mean_p[:, k8]))[0]
 #     lastbin = lastbin[-1] if len(lastbin)>0 else -1
     lastbin = -1
@@ -40,10 +41,12 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, savename):
     y_norm = np.concatenate([mean_p[:,[k2, k4, k6, k8]]])
     norm_pos = (yerr_norm<0.02) &  (yerr_norm != np.inf) & (y_norm>-0.1)
     
-    left_lim = np.min((y_norm-yerr_norm)[norm_pos])
-    right_lim = np.max((yerr_norm+y_norm)[norm_pos])
-    lim_pad = (right_lim - left_lim)/20
-    ax.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
+    # if for too low statistics that no point passes the criteria then plot full y-range
+    if np.sum(norm_pos!=0):
+        left_lim = np.min((y_norm-yerr_norm)[norm_pos])
+        right_lim = np.max((yerr_norm+y_norm)[norm_pos])
+        lim_pad = (right_lim - left_lim)/20
+        ax.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
 #     ax.set_ylim(np.min((y_norm-yerr_norm)[norm_pos]) ,np.max((yerr_norm+y_norm)[norm_pos]))
     
     ax.set_xscale('log')
@@ -55,7 +58,16 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, savename):
     ax.set_xlabel(r'$p_T$ (GeV)');
     ax.set_ylabel(r'median response');
     ax.legend()
-    figname = 'fig/corr_vs_pt_'+savename
+
+    tag = tag[4:]
+    FitFigDir1 = 'fig/corr_vs_pt'
+    FitFigDir2 = FitFigDir1+'/'+tag
+    if not os.path.exists(FitFigDir1):
+        os.mkdir(FitFigDir1)
+    if not os.path.exists(FitFigDir2):
+        os.mkdir(FitFigDir2)
+
+    figname = FitFigDir2+'/corr_vs_pt_'+tag+'_'+flavor
     plt.savefig(figname+'.pdf');
     plt.savefig(figname+'.png');
     print(f'Figure saved: {figname}.pdf /.png')
@@ -63,7 +75,7 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, savename):
     plt.show();
 
 
-def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, savename):
+def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, tag, flavor):
     ### To ignore the points with 0 on y axis when setting the y axis limits
     mean_p = mean.copy()
     mean_p[mean_p==0] = np.nan
@@ -92,7 +104,7 @@ def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, savename):
              linestyle="none", label=f'{ptbins[k8]}'+r'$<p_t<$'+f'{ptbins[k8+1]}')
 
     ### Calculate resonable limits excluding the few points with insane errors
-    yerr_norm = np.concatenate([np.sqrtmeanstd[[k2, k4, k6, k8]] ])
+    yerr_norm = np.concatenate([np.meanstd[[k2, k4, k6, k8]] ])
     y_norm = np.concatenate([mean_p[[k2, k4, k6, k8]]])
     norm_pos = (yerr_norm<0.02) &  (yerr_norm != np.inf) & (y_norm>-0.1)
     ax.set_ylim(np.min((y_norm-yerr_norm)[norm_pos]) ,np.max((yerr_norm+y_norm)[norm_pos]))
@@ -101,7 +113,15 @@ def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, savename):
 #     ax.set_xscale('log')
     ax.legend()
     
-    figname = 'fig/corr_vs_pt_'+savename
+    tag = tag[4:]
+    FitFigDir1 = 'fig/corr_vs_pt'
+    FitFigDir2 = FitFigDir1+'/'+tag
+    if not os.path.exists(FitFigDir1):
+        os.mkdir(FitFigDir1)
+    if not os.path.exists(FitFigDir2):
+        os.mkdir(FitFigDir2)
+
+    figname = FitFigDir2+'/corr_vs_pt_'+tag+'_'+flavor
     plt.savefig(figname+'.pdf');
     plt.savefig(figname+'.png');
     print(f'Figure saved: {figname}.pdf /.png')
@@ -139,4 +159,3 @@ def plot_response_dist(histo, xvals, p2, cov, chi2, Ndof, median, medianstd, Nef
     plt.savefig(figName+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
 #     print("Saving to: ", figName+'.png')
 #     plt.close();   
-    

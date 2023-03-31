@@ -64,7 +64,7 @@ class Processor(processor.ProcessorABC):
     def __init__(self):
         
         
-#         acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in subsamples}
+#         acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in flavors}
 
 #         self._accumulator = acc_dict
         
@@ -114,7 +114,22 @@ class Processor(processor.ProcessorABC):
         
         
         self.jet_factory = CorrectedJetsFactory(self.name_map, jec_stack)
-
+        
+        self.flavor2partonNr = {'b':5,
+                           'c':4,
+                           's':3,
+                           'u':2,
+                           'd':1,
+                           'bbar':-5,
+                           'cbar':-4,
+                           'sbar':-3,
+                           'ubar':-2,
+                           'dbar':-1,
+                           'g':21,
+                           'unmatched':0,
+                           }
+        
+        self.flavors = self.flavor2partonNr.keys() #['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar', 'untagged']
 #        df_csv = pd.read_csv('out_txt/Closure_L5_QCD_Pythia.coffea').set_index('etaBins')
 #        self.closure_corr = df_csv.to_numpy().transpose()
 #        self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
@@ -135,26 +150,24 @@ class Processor(processor.ProcessorABC):
         
 #     @profile    
     def process(self, events):
-        
-        subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar', 'untagged']
-        # flavour_axis = hist.axis.StrCategory(subsamples, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of subsamples. See, https://github.com/CoffeaTeam/coffea/discussions/705
+
+        flavors = self.flavors        
+        # flavour_axis = hist.axis.StrCategory(flavors, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of flavors. See, https://github.com/CoffeaTeam/coffea/discussions/705
         pt_gen_axis = hist.axis.Variable(ptbins, name="pt_gen", overflow=True, underflow=True, label=r"$p_{T,gen}$")
 #         pt_reco_axis = hist.axis.Variable(ptbins, name="pt_reco", overflow=True, underflow=True, label=r"$p_{T,reco}$")
         ptresponse_axis = hist.axis.Regular( 100, 0, 2.5, overflow=True, underflow=True, name="ptresponse", label="RECO / GEN response")
         jeteta_axis = hist.axis.Variable(etabins, name="jeteta", label=r"Jet $\eta$")
 
-        self.subsamples = subsamples
-        
-#         self.for_memory_testing()
+        # self.for_memory_testing()
         output = {'ptresponse_'+samp:hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
-                  for samp in subsamples}
+                  for samp in flavors}
 #         output['ptresponse'] = hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
 #         output['ptresponse'] = hist.Hist(flavour_axis,
 #                                             pt_gen_axis, ptresponse_axis, jeteta_axis,
 #                                             storage="weight", name="Counts")
 #         self.for_memory_testing()
         ### Store only the sums of values. Much simpler than storing the whole reco_pt histogram
-        for samp in subsamples:
+        for samp in flavors:
             output['reco_pt_sumwx_'+samp] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
 #         output['reco_pt_sumwx'] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
 #         self.for_memory_testing()
@@ -338,8 +351,8 @@ class Processor(processor.ProcessorABC):
 
                 reco_jets["LHE_Flavour"] = ak.unflatten(LHE_flavour_np, jet_shape)    
     
-        gen_jets = gen_jets
-        reco_jets = reco_jets         
+        # gen_jets = gen_jets
+        # reco_jets = reco_jets         
         
         shapes_jets = ak.num(gen_jets.pt) #for event weights
         gen_jetpt  = ak.flatten(gen_jets.pt).to_numpy( allow_missing=True)
@@ -366,28 +379,28 @@ class Processor(processor.ProcessorABC):
             weights = selectedEvents.Generator.weight
     
         weights2 = np.repeat(weights, shapes_jets)
-        subsamples = self.subsamples
-        masks = {}
-        masks['b'] = ak.flatten((jet_flavour==5)).to_numpy( allow_missing=True)
-        masks['c'] = ak.flatten((jet_flavour==4)).to_numpy( allow_missing=True)
-        masks['d'] = ak.flatten(jet_flavour==2).to_numpy( allow_missing=True)
-        masks['u'] = ak.flatten(jet_flavour==1).to_numpy( allow_missing=True)
-        masks['s'] = ak.flatten((jet_flavour==3) ).to_numpy( allow_missing=True)
-        masks['bbar'] = ak.flatten((jet_flavour==-5)).to_numpy( allow_missing=True)
-        masks['cbar'] = ak.flatten((jet_flavour==-4)).to_numpy( allow_missing=True)
-        masks['ubar'] = ak.flatten(jet_flavour==-1).to_numpy( allow_missing=True)
-        masks['dbar'] = ak.flatten(jet_flavour==-2).to_numpy( allow_missing=True)
-        masks['sbar'] = ak.flatten((jet_flavour==-3) ).to_numpy( allow_missing=True)
-        masks['g'] = ak.flatten(jet_flavour==21).to_numpy( allow_missing=True)
+                           
+        masks = {flav: ak.flatten((jet_flavour == self.flavor2partonNr[flav] )).to_numpy( allow_missing=True)
+                 for flav in flavors if 'unmatched' not in flav}
         from functools import reduce
-        masks['untagged'] = reduce(lambda x, y: (~ x)*(~ y), masks.values()) ## find the jets that are not taggeed
-        
-        
-        ptresponses     = { sample: ptresponse_np[masks[sample]]        for sample in subsamples }
-        gen_jetpts      = { sample: gen_jetpt[masks[sample]]            for sample in subsamples }
-        gen_jetetas     = { sample: gen_jeteta[masks[sample]]           for sample in subsamples }
-        jetpts          = { sample: jetpt[masks[sample]]                for sample in subsamples }
-        weights_jet     = { sample: weights2[masks[sample]]             for sample in subsamples }
+        masks['unmatched'] = reduce(lambda x, y: x+y, masks.values()) == 0 ## find the jets that are not taggeed
+        # for flav in flavors:
+        #      print(f"sum masks for flav {flav} = {np.sum(masks[flav])}.")
+        #      print(f"sum masks2 for flav {flav} = {np.sum(masks2[flav])}.")
+        # print(f"sum masks all { np.sum([ masks[flav] for flav in flavors])}.")
+        # print(f"len masks =  { len( masks['b'])}.")
+        # print(f"len iso jets  =  { ak.sum(ak.num(sel_jets))}.")
+        # print(f"sum masks for flav {'b'} = {np.sum(masks['b'])}.")
+        # print(f"len reco jets  =  { ak.sum(ak.num(reco_jets))}.")
+        # print(f"len gen jets  =  { ak.sum(ak.num(gen_jets))}.")
+
+        ptresponses     = { flav: ptresponse_np[masks[flav]]        for flav in flavors }
+        gen_jetpts      = { flav: gen_jetpt[masks[flav]]            for flav in flavors }
+        gen_jetetas     = { flav: gen_jeteta[masks[flav]]           for flav in flavors }
+        jetpts          = { flav: jetpt[masks[flav]]                for flav in flavors }
+        weights_jet     = { flav: weights2[masks[flav]]             for flav in flavors }
+
+        # print(f"len ptresponses {'b'} = {len(ptresponses['b'])}.")
 
         # print("Try to np:")
         # ak.flatten(gen_jetpt).to_numpy()
@@ -400,23 +413,25 @@ class Processor(processor.ProcessorABC):
 #         output['ptresponse'].fill(pt_gen=gen_jetpt,
 #                                                    jeteta=gen_jeteta,
 #                                                    ptresponse=ptresponse_np)
-        for sample in subsamples:
-            output['ptresponse_'+sample].fill(pt_gen=gen_jetpts[sample],
-                                              jeteta=gen_jetetas[sample],
-                                              ptresponse=ptresponses[sample],
-#                                               weight=weights_jet[sample]
+        for flav in flavors:
+            output['ptresponse_'+flav].fill(pt_gen=gen_jetpts[flav],
+                                              jeteta=gen_jetetas[flav],
+                                              ptresponse=ptresponses[flav],
+#                                               weight=weights_jet[flav]
                                              )
             
-            output['reco_pt_sumwx_'+sample].fill(pt_gen=gen_jetpts[sample],
-                                                 jeteta=gen_jetetas[sample],
-                                                 weight=jetpts[sample] #*weights_jet[sample]
+            output['reco_pt_sumwx_'+flav].fill(pt_gen=gen_jetpts[flav],
+                                                 jeteta=gen_jetetas[flav],
+                                                 weight=jetpts[flav] #*weights_jet[flav]
                                                 )
-#         self.for_memory_testing()
+        # self.for_memory_testing()
+
+        # allflav = [key for key in output.keys() if 'ptresponse' in key]
+        # print(f"len iso jets  =  { sum([output[key].sum().value for key in allflav]) }.")
+        # print(f"sum weights  =  { sum([output[key].sum().value for key in allflav]) }.")
+        # print(f"output sum for {'b'} = {output['ptresponse_b'].sum().value}.")
 
         return {dataset: output}
 
     def postprocess(self, accumulator):
         return accumulator
-
-
-
