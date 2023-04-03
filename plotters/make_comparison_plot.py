@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.interpolate import CubicSpline
 from coffea import util
-import cycler
+from cycler import cycler
 import os
     
 
@@ -61,12 +61,17 @@ def make_comparison_plot(data_dict,
     ax = fig.add_subplot(gs[0])
     ax2 = fig.add_subplot(gs[1])
     
-    # To make colors colors of the first points to the colors of the first lines and all start with black
+    # Set up a new cycler to set up colors of the lines match to the colors of the points and all start with black, while for the ratio plot to start with the second marker and color
     reset_colors = True ### if match the colors of the first points to the colors of the first lines
-    old_rc_cols = plt.rcParams['axes.prop_cycle']
-    new_cols = cycler.concat(cycler.cycler(color=['k']), old_rc_cols)
-#     plt.rcParams['axes.prop_cycle'] = 
-    ax.set_prop_cycle(new_cols)
+    old_rc_cycler = plt.rcParams['axes.prop_cycle']
+    rc_bykey = old_rc_cycler.by_key()
+    for key in rc_bykey.keys():
+        if key=='color':
+            rc_bykey[key] = ['k']+rc_bykey[key]
+        else:
+            rc_bykey[key] = rc_bykey[key]+[rc_bykey[key][-1]]
+    new_cycler = cycler(**rc_bykey)
+    ax.set_prop_cycle(new_cycler)
     
     for axis in [ax.xaxis, ax.yaxis, ax2.xaxis, ax2.yaxis]:
         axis.set_minor_locator(mpl.ticker.AutoMinorLocator())
@@ -81,20 +86,20 @@ def make_comparison_plot(data_dict,
         stds = yvals**2*stds
 
     eta_str = r'{:0.2f}$<\eta<${:0.2f}'.format(etabins_mod[etaidx], etabins_mod[etaidx+1])
-    p1 = ax.errorbar(xvals, yvals[0], yerr=stds[0], marker='o',
+    p1 = ax.errorbar(xvals, yvals[0], yerr=stds[0], #marker='o',
     #                      markerfacecolor='none', markeredgewidth=1,
                  linestyle="none", label=keys[0]) #+', '+eta_str)
 
-    markers = ['v','^','d', 'p']
-    for val, name, std, marker in zip(yvals[1:], keys[1:], stds[1:], markers):
-        ax.errorbar(xvals, val, yerr=std, marker=marker,
+    # markers = ['v','^','d', 'p']
+    for val, name, std in zip(yvals[1:], keys[1:], stds[1:]):
+        ax.errorbar(xvals, val, yerr=std, #marker=marker,
                     linestyle="none", label=name)
     validx = (xvals>0)*(yvals[0]>0)
     xlog10_spline = np.linspace(np.log10(np.min(xvals[validx])),  np.log10(np.max(xvals[validx])), 100)
     xspline = 10**xlog10_spline
 
     if reset_colors:
-        ax.set_prop_cycle(new_cols)
+        ax.set_prop_cycle(new_cycler)
 
     yvals_cont = {}
     yvals_spline = {}
@@ -134,17 +139,24 @@ def make_comparison_plot(data_dict,
         hatch=10 * "/",
     )
 
-    for val, std, marker in zip(data_model_ratio[1:], data_model_ratio_unc[1:], markers):
+    rc_bykey = new_cycler.by_key().copy()
+    for key in rc_bykey:
+        rc_bykey[key] = rc_bykey[key][1:]
+    shifted_cycler = cycler(**rc_bykey)
+    ax2.set_prop_cycle(shifted_cycler)
+
+    for val, std in zip(data_model_ratio[1:], data_model_ratio_unc[1:]): #, markers):
         ax2.errorbar(
             xvals,
             val, #[nonzero_model_yield],
             yerr=std, #[nonzero_model_yield],
-            fmt=marker,
+            linestyle="none",
+            #fmt=marker,
         )
 
     ############################ Curves in the ratio plot (using spline approximation) #######
     if reset_colors:
-        ax2.set_prop_cycle(new_cols)
+        ax2.set_prop_cycle(new_cycler)
         
     spline_func = CubicSpline(np.log10(xvals[validx]), yvals[0][validx], bc_type='natural')
     y_spline = spline_func(xlog10_spline)
@@ -192,8 +204,10 @@ def make_comparison_plot(data_dict,
     ax.hlines(1,1, 10000, linestyles='--',color="black",
               linewidth=1,)
 
-    ax.set_xticks([])
+#     ax.set_xticks([])
     ax2.set_xticks([10, 20, 50, 100, 500, 1000, 5000])
+    ax.set_xticks(ax2.get_xticks())
+    ax.set_xticklabels([])
     ax2.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
     leg1 = ax.legend(ncol=1)
 
@@ -205,12 +219,18 @@ def make_comparison_plot(data_dict,
     fig_corr_name = 'corr' if inverse else 'med_resp'
     run_name =  fig_corr_name+'_vs_pt_L5_'+'-'.join(keys)+'-'.join(function_dict.keys())
     run_name = run_name.replace(', ', '-').replace(" ", "_").replace("+", "_")
-    dir_name = 'fig/'+run_name
-    if not os.path.exists(dir_name):
-        os.mkdir(dir_name)
-        print("Creating directory ", dir_name)
+    dir_name1 = 'fig/corr_vs_pt_comparisons/'
+    dir_name2 = dir_name1+run_name
+    if not os.path.exists(dir_name1):
+        os.mkdir(dir_name1)
+        print("Creating directory ", dir_name1)
+    if not os.path.exists(dir_name2):
+        os.mkdir(dir_name2)
+        print("Creating directory ", dir_name2)
 
-    fig_name = dir_name+'/'+run_name+"_"+samp+eta_string
+        
+        
+    fig_name = dir_name2+'/'+run_name+"_"+samp+eta_string
     print("Saving plot for eta = ", eta_string)
     print("Saving plot with the name = ", fig_name+".pdf / .png")
     plt.savefig(fig_name+'.pdf');

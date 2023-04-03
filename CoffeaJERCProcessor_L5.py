@@ -240,9 +240,12 @@ class Processor(processor.ProcessorABC):
         ############ Jet selection ###########
         # Cut if no matching gen jet found
         jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
-        # At least one matched (dressed) electron/muon found
-        dressed_electron_mask = ak.sum(ak.is_none(jets.matched_electrons,axis=2), axis=2)==2
-        dressed_muon_mask     = ak.sum(ak.is_none(jets.matched_muons,axis=2), axis=2)==2
+        # At least one matched (dressed) electron/muon found;
+        # each jet has two slots for matched electrons available. Check that both are None. 
+        ele_partFlav = jets.matched_electrons.genPartFlav
+        dressed_electron_mask = np.logical_not(np.sum((ele_partFlav == 1) | (ele_partFlav == 15),axis=2))
+        mu_partFlav = jets.matched_muons.genPartFlav
+        dressed_muon_mask = np.logical_not(np.sum((mu_partFlav == 1) | (mu_partFlav == 15),axis=2))
         jet_mask = jet_gen_match_mask  & dressed_electron_mask & dressed_muon_mask
             
         selected_jets = jets[jet_mask]
