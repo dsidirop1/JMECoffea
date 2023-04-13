@@ -7,34 +7,27 @@ from memory_profiler import profile
 
 import sys
 sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/coffea')
+
+ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
+if ak_path not in sys.path:
+        sys.path.insert(0,ak_path)
 # sys.path.insert(0,'/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea')
-sys.path
+# print("sys path = ", sys.path)
 
 # from os import listdir
 # listdir('.')
 # listdir('./coffea')
 
-# import scipy.stats as ss
-from coffea import processor, nanoevents
-from coffea import util
+from coffea import processor
 import numpy as np
-import pandas as pd
-# from coffea.jetmet_tools import JetCorrectionUncertainty # FactorizedJetCorrector
 from coffea.jetmet_tools import JECStack, CorrectedJetsFactory
 from coffea.lookup_tools import extractor
 
 from count_2d import count_2d
 import hist
+import awkward as ak
 # from coffea import some_test_func
 # some_test_func.test_func()
-
-
-
-import awkward as ak
-#from coffea.nanoevents.methods import nanoaod
-# from coffea.nanoevents.methods import candidate
-# from coffea.nanoevents.methods import vector
-
 
 
 manual_bins = [400, 500, 600, 800, 1000, 1500, 2000, 3000, 7000, 10000]
@@ -61,14 +54,7 @@ etabins = np.array([-5.191, -4.889, -4.716, -4.538, -4.363, -4.191, -4.013, -3.8
 """@TTbarResAnaHadronic Package to perform the data-driven mistag-rate-based ttbar hadronic analysis. 
 """
 class Processor(processor.ProcessorABC):
-    def __init__(self):
-        
-        
-#         acc_dict = {'ptresponse_'+samp: hist.Hist("Counts", dataset_axis, jetpt_axis, jeteta_axis, ptresponse_axis) for samp in flavors}
-
-#         self._accumulator = acc_dict
-        
-        
+    def __init__(self):        
         ext = extractor()
         ext.add_weight_sets([
             "* * Summer20UL18_V2_MC/Summer20UL18_V2_MC_L1FastJet_AK4PFchs.txt",
@@ -84,23 +70,9 @@ class Processor(processor.ProcessorABC):
 #                            "Summer19UL18_V5_MC_L2L3Residual_AK4PFchs",
                           ]
 
-        evaluator = ext.make_evaluator()
-        
-        print("evaluator = ", evaluator)
-        print("evaluator keys = ", evaluator.keys())
-        
+        evaluator = ext.make_evaluator()        
         jec_inputs = {name: evaluator[name] for name in jec_stack_names}
         jec_stack = JECStack(jec_inputs)
-        
-        
-        ### more possibilities are available if you send in more pieces of the JEC stack
-        # mc2016_ak8_jxform = JECStack(["more", "names", "of", "JEC parts"])
-        
-#         self.corrector = FactorizedJetCorrector(
-#             Summer20UL18_V2_MC_L1FastJet_AK4PFchs=evaluator['Summer20UL18_V2_MC_L1FastJet_AK4PFchs'],
-#             Summer20UL18_V2_MC_L2Relative_AK4PFchs=evaluator['Summer20UL18_V2_MC_L2Relative_AK4PFchs'],
-#             Summer20UL18_V2_MC_L3Absolute_AK4PFchs=evaluator['Summer20UL18_V2_MC_L3Absolute_AK4PFchs'],
-#         )
 
         self.name_map = jec_stack.blank_name_map
         self.name_map['JetPt'] = 'pt'
@@ -114,7 +86,6 @@ class Processor(processor.ProcessorABC):
         
         
         self.jet_factory = CorrectedJetsFactory(self.name_map, jec_stack)
-        
         self.flavor2partonNr = {'b':5,
                            'c':4,
                            's':3,
@@ -138,7 +109,7 @@ class Processor(processor.ProcessorABC):
         
 #         ### Uncomment to set closure as 1
 #         self.closure_corr = np.ones(self.closure_corr.shape)
-
+    print(f"awkward version {ak.__version__}")
             
     @property
     def accumulator(self):
@@ -154,22 +125,16 @@ class Processor(processor.ProcessorABC):
         flavors = self.flavors        
         # flavour_axis = hist.axis.StrCategory(flavors, growth=False, name="jet_flav", label=r"jet_flavour")  ###not completelly sure if defining an axis is better than doing through a dictionary of flavors. See, https://github.com/CoffeaTeam/coffea/discussions/705
         pt_gen_axis = hist.axis.Variable(ptbins, name="pt_gen", overflow=True, underflow=True, label=r"$p_{T,gen}$")
-#         pt_reco_axis = hist.axis.Variable(ptbins, name="pt_reco", overflow=True, underflow=True, label=r"$p_{T,reco}$")
         ptresponse_axis = hist.axis.Regular( 100, 0, 2.5, overflow=True, underflow=True, name="ptresponse", label="RECO / GEN response")
         jeteta_axis = hist.axis.Variable(etabins, name="jeteta", label=r"Jet $\eta$")
 
-        # self.for_memory_testing()
+        self.for_memory_testing()
         output = {'ptresponse_'+samp:hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
                   for samp in flavors}
-#         output['ptresponse'] = hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
-#         output['ptresponse'] = hist.Hist(flavour_axis,
-#                                             pt_gen_axis, ptresponse_axis, jeteta_axis,
-#                                             storage="weight", name="Counts")
-#         self.for_memory_testing()
+        # self.for_memory_testing()
         ### Store only the sums of values. Much simpler than storing the whole reco_pt histogram
         for samp in flavors:
             output['reco_pt_sumwx_'+samp] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
-#         output['reco_pt_sumwx'] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
 #         self.for_memory_testing()
         
         cutflow_axis = hist.axis.StrCategory([], growth=True, name="cutflow", label="Cutflow Scenarios")
@@ -242,11 +207,17 @@ class Processor(processor.ProcessorABC):
         jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
         # At least one matched (dressed) electron/muon found;
         # each jet has two slots for matched electrons available. Check that both are None. 
-        ele_partFlav = jets.matched_electrons.genPartFlav
-        dressed_electron_mask = np.logical_not(np.sum((ele_partFlav == 1) | (ele_partFlav == 15),axis=2))
-        mu_partFlav = jets.matched_muons.genPartFlav
-        dressed_muon_mask = np.logical_not(np.sum((mu_partFlav == 1) | (mu_partFlav == 15),axis=2))
-        jet_mask = jet_gen_match_mask  & dressed_electron_mask & dressed_muon_mask
+
+        genpart = selectedEvents.GenPart
+        lepton_mask = (
+                ((np.abs(genpart.pdgId) == 11) | (np.abs(genpart.pdgId) == 13) | (np.abs(genpart.pdgId) == 15 ))
+                & (genpart.statusFlags>>13&1 == 1) 
+                & (genpart.statusFlags&1 == 1)
+        )
+        genpart = genpart[lepton_mask]
+        drs = jets.metric_table(genpart, return_combinations=False, axis=1 )
+        matched_with_promt_lep = np.any((drs<0.4),axis=2)
+        jet_mask = jet_gen_match_mask  & np.logical_not(matched_with_promt_lep)
             
         selected_jets = jets[jet_mask]
         output['cutflow'].fill(cutflow='gen_matched+no_dressed_lep', weight=ak.sum(ak.num(selected_jets)))
@@ -271,22 +242,6 @@ class Processor(processor.ProcessorABC):
         sel_jets = sel_jets[jet_iso_mask]
         
         output['cutflow'].fill(cutflow='iso jets', weight=ak.sum(ak.num(sel_jets)))
-
-        # print("jet_gen_match_mask/ dressed_electron_mask/ dressed_muon_mask/ jet_mask")
-        
-        # print(ak.sum(jet_gen_match_mask))
-        # print(ak.sum(dressed_electron_mask))
-        # print(ak.sum(dressed_muon_mask))
-        # print(ak.sum(jet_mask)    )
-        # print("N jets before cuts tot = ", ak.sum(ak.num(jets)))
-        # print("By ev = ", ak.num(jets)[:20])
-        # print("N jets after first cuts = ", ak.sum(ak.num(selected_jets)))
-        # print("By ev = ", ak.num(jets)[:20])
-        # print("jet_pt_mask = ", ak.sum(jet_pt_mask))
-        # print("jet_iso_mask = ", ak.sum(jet_iso_mask))
-
-        # print("N jets after sel = ", ak.sum(ak.num(sel_jets)))
-        # print("By ev after sel = ", ak.num(sel_jets))
 
         ############ Apply Jet energy corrections on the jets ###########
         # define variables needed for corrected jets
@@ -427,7 +382,7 @@ class Processor(processor.ProcessorABC):
                                                  jeteta=gen_jetetas[flav],
                                                  weight=jetpts[flav] #*weights_jet[flav]
                                                 )
-        # self.for_memory_testing()
+        self.for_memory_testing()
 
         # allflav = [key for key in output.keys() if 'ptresponse' in key]
         # print(f"len iso jets  =  { sum([output[key].sum().value for key in allflav]) }.")

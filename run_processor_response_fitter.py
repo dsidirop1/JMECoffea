@@ -11,6 +11,11 @@ def main():
     coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
     if coffea_path not in sys.path:
         sys.path.insert(0,coffea_path)
+
+    ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
+
+    if ak_path not in sys.path:
+        sys.path.insert(0,ak_path)
     
     import time
     import scipy.stats as ss
@@ -57,8 +62,8 @@ def main():
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
     ### tag for the dataset used
-    data_tag = 'Herwig-TTBAR' #'_LHEflav1_TTBAR-JME' #'_LHEflav1_TTBAR-Summer16-cFlip'
-    # data_tag = 'Herwig-TTBAR'
+    # data_tag = 'Pythia-TTBAR' #'_LHEflav1_TTBAR-JME' #'_LHEflav1_TTBAR-Summer16-cFlip'
+    data_tag = 'Pythia-TTBAR' #'Pythia-TTBAR'
     ### name of the specific run if parameters changed
     add_tag = ''  
     
@@ -68,10 +73,11 @@ def main():
     
     dataset = None
     fileslist = None
+    # fileslist = ['root://xrootd-cms.infn.it//store/mc/RunIISummer20UL18NanoAODv9/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/250000/FB515EF7-95ED-CA4F-8C9C-BB7C02F2CD4A.root']
     
     dataset_dictionary = {
         "Pythia-TTBAR": 'fileNames/TTToSemi20UL18_JMENano.txt',
-        "Herwig-TTBAR": 'fileNames/TTbar_Herwig_20UL18_JMENano.txt',
+        "Herwig-TTBAR": 'fileNames/TT20UL18_JMENano_Herwig.txt',
         "DY-MG-Py":     'fileNames/DYJets_MG-Py.txt',
         "DY-MG-Her":    'fileNames/DYJets_MG-Her.txt',
         "QCD-MG-Py":    'fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt',
@@ -185,6 +191,25 @@ def main():
         xsec_dict = {'dataset1': 1}
         filesets = {'dataset1': {"files": fileslist, "metadata": {"xsec": 1}}}
     
+# ### RUN THIS CELL ONLY IF YOU ARE USING SWAN 
+
+#     ##### REMEMBER TO MANUALLY COPY THE PROXY TO YOUR CERNBOX FOLDER AND TO MODIFY THE NEXT LINE
+#     os.environ['X509_USER_PROXY'] = certificate_dir
+#     if os.path.isfile(os.environ['X509_USER_PROXY']):
+#         print("Found proxy at {}".format(os.environ['X509_USER_PROXY']))
+#     else:
+#         print("os.environ['X509_USER_PROXY'] ",os.environ['X509_USER_PROXY'])
+#     os.environ['X509_CERT_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/certificates'
+#     os.environ['X509_VOMS_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/vomsdir'
+#     os.environ['X509_USER_CERT'] = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
+
+#     env_extra = [
+#                 f'export X509_USER_PROXY={os.environ["X509_CERT_DIR"]}',
+#                 f'export X509_CERT_DIR={os.environ["X509_CERT_DIR"]}',
+#                 # f'export X509_USER_PROXY={certificate_dir}',
+#                 # f'export X509_CERT_DIR={certificate_dir}',
+            # ]
+
     import uproot
     ff = uproot.open(fileslist[0])
     ff.keys()
@@ -237,7 +262,7 @@ def main():
             cluster = CernCluster(
     # #             memory=config.run_options['mem_per_worker'],
     # #             disk=config.run_options.get('disk_per_worker', "20GB"),
-    #             env_extra=env_extra,
+                # env_extra=env_extra,
                 cores = 1,
                 memory = '4000MB',
                 disk = '2000MB',
