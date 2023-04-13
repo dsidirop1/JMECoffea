@@ -219,7 +219,9 @@ def add_flavors(output, flavor='all', combine_antiflavour=True ):
     
     ############## Find the correct histograms from output to add ################
     if flavor=='all':
-        combine_samples = [flavor for flavor in all_samples if 'untagged' not in flavor ]
+        combine_samples = [flavor for flavor in all_samples if 'unmatched' not in flavor ]
+    elif flavor=='all_unmatched':
+        combine_samples = [flavor for flavor in all_samples ]
     else:
         try:
             combine_samples = composite_sample_dict[flavor]

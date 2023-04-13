@@ -8,22 +8,19 @@ import os
     
 
 ### Some recent file to get out the binning
-outname = 'out/CoffeaJERCOutputs_L5_fine_etaBins_QCD.coffea'
+outname = '../out/CoffeaJERCOutputs_L5_QCD-MG-Py.coffea'
 output = util.load(outname)
 
 f_xvals = np.linspace(0,5,5001)
 
-ptbins = output['ptresponse'].axis('pt').edges()
-ptbins_c = output['ptresponse'].axis('pt').centers()
+ptbins = output['HT50to100']['ptresponse_b'].axes['pt_gen'].edges
+ptbins_c = output['HT50to100']['ptresponse_b'].axes['pt_gen'].centers
 etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
 # etabins = np.array([-5.191, -3.489, -3.139, -2.853,   -2.5,
 #                     -2.322,  -1.93, -1.653, -1.305, -0.783,      
 #                     0,  0.783,  1.305,  1.653,   1.93,  2.322, 2.5, 
 #                     2.853,  3.139,  3.489, 5.191])
     
-
-# jetpt_length = len(ptbins)-1
-# jeteta_length = (len(etabins)-1)//2
 
 etabins_mod = etabins[(len(etabins)-1)//2:]
 etabins_c = (etabins_mod[:-1]+etabins_mod[1:])/2 #output['ptresponse'].axis('jeteta').centers()
@@ -35,10 +32,7 @@ def make_comparison_plot(data_dict,
     ''' Make a coparison and a ratio plot of yvar2 vs yvar_base
     
     To do:
-    - ptreco for all samples
-    - ratio at least for data
-    - ratio also for fuctions at each point
-    - Proper errors on closure data stuff
+    - ptreco for all samples. Make sence of the ratio plots (ptreco is different for numerator and denominator)
     '''
    
     keys = [key for key in data_dict.keys()]
@@ -117,7 +111,7 @@ def make_comparison_plot(data_dict,
         if corr_bin_idx==len(corr_etabins):
             corr_bin_idx-=1
         eta_str = r'{:0.2f}$<\eta<${:0.2f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
-        ax.plot(xvals_cont, yvals_cont[name], label=name+', '+eta_str)
+        ax.plot(xvals_cont, yvals_cont[name], label=name+', '+eta_str, markersize=0)
 
     ############################ Data ratio plot ######################################
     ax2.hlines(1,1, 10000, linestyles='--',color="black",
@@ -162,7 +156,7 @@ def make_comparison_plot(data_dict,
     y_spline = spline_func(xlog10_spline)
 
     for key in yvals_spline.keys():
-        ax2.plot(xvals_cont, yvals_spline[key]/y_spline)
+        ax2.plot(xvals_cont, yvals_spline[key]/y_spline, markersize=0)
 
 #     ax.plot(xspline, y_spline)
 
@@ -236,3 +230,4 @@ def make_comparison_plot(data_dict,
     plt.savefig(fig_name+'.pdf');
     plt.savefig(fig_name+'.png');
     plt.show();
+
