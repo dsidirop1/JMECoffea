@@ -297,6 +297,7 @@ def main():
         
         client.upload_file('CoffeaJERCProcessor'+tag_Lx+'.py')
         client.upload_file('count_2d.py')
+        client.upload_file('common_binning.py')
     
         client
     
