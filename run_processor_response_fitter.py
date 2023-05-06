@@ -2,8 +2,43 @@
     # coding: utf-8
 ### run_processor_response_fitter.py
 ### File automatically converted using ConvertJupyterToPy.ipynb from run_processor_response_fitter.ipynb
-### Formatting or commets may not be preserved by the conversion.
+### No comments or formatting is preserved by the transfer.
 def main():
+    
+    # The file does two tasks:
+    # 1) Runs over the NanoAOD files using coffea and the processor in `CoffeaJERCProcessor_L5.py`, and creates the histograms of jet reponses and reco jet $p_T$. Stores the result in outname='out/CoffeaJERCOutputs'tag_Lx+'_'+data_tag+add_tag'.coffea'
+    # 2) Fits the response histograms (or calculates the medians) and creates the `txt` files with the fit results (one fle for each `Mean`, `MeanVar`, `Median`, `MedianStd`, `MeanRecoPt`)
+    # 
+    # It is possible to bypass the (usually long) part 1) by applying `load_preexisting = True`. In such case, a file with `outname` will be read and then the histograms refit.
+    # Options for running on condor, coffea Case using dask are available. See, under `Parameters of the run and switches`.
+    # 
+    # At the moment, for producing the flavor uncertatinties, for obtaining the results over the 6 datasets neccessary, the script has to be once for each of them (QCD stiching is done automatically) as dask+condor is still sometimes unstable, but this can be united in the future.
+    
+    # # Dask Setup:
+    # ---
+    # ### For Dask+Condor setup on lxplus
+    # #### 1.) The wrapper needs to be installed following https://github.com/cernops/dask-lxplus
+    # #### 2.) Source lcg environment in bash
+    # #### `source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh`
+    # #### Singularity could work but not confirmed.
+    # ---
+    # ### For Coffea-Casa, the client must be specified according to the user that is logged into the Coffea-Casa Environment.
+    # #### 1.) go to the left of this coffea-casa session to the task bar and click the orange-red button; it will say "Dask" if you hover your cursor over it
+    # #### 2.) scroll down to the blue box where it shows the "Scheduler Address"
+    # #### 3.) write that full address into the dask Client function 
+    # #### Example: `client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")`
+    # ---
+    # ### For CMSLPC, the client must be specified with the LPCCondorCluster
+    # #### 1.) follow installation instructions from https://github.com/CoffeaTeam/lpcjobqueue, if you have not already done so, to get a working singularity environment with access to lpcjobqueue and LPCCondorCluster class
+    # #### 2.) import LPCCondorCluster: `from lpcjobqueue import LPCCondorCluster`
+    # #### 3.) define the client
+    # #### Example: 
+    # `cluster = LPCCondorCluster()`
+    # 
+    # `client = Client(cluster)`
+    # 
+    
+    # ### My favorite notebook settings
     
     # ### Imports
     
@@ -11,9 +46,9 @@ def main():
     coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
     if coffea_path not in sys.path:
         sys.path.insert(0,coffea_path)
-
+    
     ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
-
+    
     if ak_path not in sys.path:
         sys.path.insert(0,ak_path)
     
@@ -43,37 +78,45 @@ def main():
     from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors
     from plotters.plotters import plot_response_dist, plot_corrections, plot_corrections_eta
     
-    from helpers import rebin_hist, mirror_eta_to_plus, sum_neg_pos_eta
+    from helpers import rebin_hist, mirror_eta_to_plus, sum_neg_pos_eta, find_ttbar_xsec
+    from common_binning import JERC_Constants
     # %matplotlib notebook 
     
-    # ### Parameters of the run
-    UsingDaskExecutor = True
-    CERNCondorCluster = True
-    CoffeaCasaEnv     = False
+    # ### Parameters of the run and switches
+    
+    UsingDaskExecutor = True   ### True if use dask local executor, otherwise use futures
+    CERNCondorCluster = True   ### True if run on the CERN condor cluster using dask. Requires `UsingDaskExecutor` = True
+    CoffeaCasaEnv     = False   ### True if run on coffea case. Never tested since ages.
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False   ### True if run only on one file and five chuncs to debug processor
     load_fit_res      = False   ### True if only replot the fit results
     
-    fine_etabins      = False   ### Don't merge eta bins together when fitting responses. Preprocessing always done in many bins
+    ### If True use JERC default binning, if False, merge bins into the Run 1 binning (binning in HCal sectors) 
+    ### Preprocessing always done in many bins
+    fine_etabins      = False   
     one_bin           = False   ### Unite all eta and pt bins in one
     
     Nfiles = -1                 ### -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
-    ### tag for the dataset used
-    # data_tag = 'Pythia-TTBAR' #'_LHEflav1_TTBAR-JME' #'_LHEflav1_TTBAR-Summer16-cFlip'
-    data_tag = 'Pythia-TTBAR' #'Pythia-TTBAR'
-    ### name of the specific run if parameters changed
-    add_tag = ''  
+    ### Define the dataset either by using a `data_tag` available in `dataset_dictionary`
+    ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
+    ### Or manually by defining `fileslist` as the list with file names.
+    ### data_tag will be used to name output figures and histograms.
+    data_tag = 'QCD-MG-Her' 
+    # data_tag = 'DY-FxFx'
+    ### name of the specific run if parameters changed used for saving figures and output histograms.
+    add_tag = '_alphacut_0p2'  
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
+    
+    # fileslist = ['root://xrootd-cms.infn.it/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2510000/056516']
     
     # ### Dataset parameters
     
     dataset = None
     fileslist = None
-    # fileslist = ['root://xrootd-cms.infn.it//store/mc/RunIISummer20UL18NanoAODv9/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/250000/FB515EF7-95ED-CA4F-8C9C-BB7C02F2CD4A.root']
     
     dataset_dictionary = {
         "Pythia-TTBAR": 'fileNames/TTToSemi20UL18_JMENano.txt',
@@ -86,8 +129,14 @@ def main():
         "DY-FxFx":      'fileNames/DYJets.txt',
     }
     
+    if 'QCD' in 'data_tag':
+        print('Alpha cut of $\alpha<0.2$ will be used and a cut on three leading jets')
+    else:
+        print('No alpha cut and cut on the leading jets will be used')
+        
+    
     if not (fileslist is None):
-        print(f'A specific filelist specified. The calculation will be run on the files {fileslist}')
+        print(f'A specific filelist specified. The calculation will be run on the files {filelist}')
     elif data_tag in dataset_dictionary.keys():
         dataset = dataset_dictionary[data_tag]
         print(f'The data tag "{data_tag}" found in the dataset_dictionary. The dataset "{dataset}" will be used.')
@@ -95,6 +144,7 @@ def main():
         print(f'Using the provided dataset "{dataset}" and the data tag "{data_tag}".')
     else:
         raise ValueError(f'The data tag "{data_tag}" not found in the dataset_dictionary and no dataset provided.')
+        
     
     ### Choose the correct redirector
     ## assume running on the LPC
@@ -106,6 +156,8 @@ def main():
     # if running on coffea casa instead...
     if CoffeaCasaEnv:
         xrootdstr = 'root://xcache/'
+    
+    # ### Do some logic with the input partameters and the rest of parameters of the run
     
     #Import the correct processor
     Processor = importlib.import_module('CoffeaJERCProcessor'+tag_Lx).Processor
@@ -144,13 +196,11 @@ def main():
         os.mkdir("test/out_txt")
         os.mkdir("test/fig")
         
-    maxchunks = 2 if test_run else None
+    maxchunks = 5 if test_run else None
     if test_run:
         Nfiles = 1
     
     print(f'Running on the number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}')
-    
-    # ### For the attempt to correctly combine three ttbar channels. Not fully tested
     
     def txt2filesls(dataset_name):
         with open(dataset_name) as f:
@@ -158,13 +208,15 @@ def main():
             fileslist = [xrootdstr + file for file in rootfiles]
         return fileslist
     
+    # ### For the attempt to correctly combine three ttbar channels. Not fully tested
+    
     combineTTbar = False
     ttbar_tags = ['Semi', 'Dilep', 'Had']
     
     filesets = {}
     if not (fileslist is None):
-        xsec_dict = {'dataset1': 1}
-        filesets = {'dataset1': {"files": fileslist, "metadata": {"xsec": 1}}}
+        xsec_dict = {data_tag: 1}
+        filesets = {data_tag: {"files": fileslist, "metadata": {"xsec": 1}}}
     elif combineTTbar:
         for ftag in ttbar_tags:
             data_name = f'fileNames/fileNames_TTTo{ftag}20UL18_JMENano.txt'
@@ -177,69 +229,28 @@ def main():
         with open(dataset) as f:
             lines = f.readlines()
         lines_split = [line.split() for line in lines]
-        xsec_dict = {lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
-        file_dict = {lineii[1]: lineii[0] for lineii in lines_split }
+        if test_run:
+            lines_split = lines_split[:3]  
+        xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
+        file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
         for key in file_dict.keys():
             data_name = file_dict[key]
             fileslist = txt2filesls(dataset_path+'/'+data_name)[:Nfiles]
             filesets[key] = {"files": fileslist, "metadata": {"xsec": xsec_dict[key]}}
-        if test_run:
-            filesets = {key: filesets[key] for key in list(filesets.keys())[:3]}      
+        
     else:
         fileslist = txt2filesls(dataset)[:Nfiles]
         #### If manyally adding fileslist
-        xsec_dict = {'dataset1': 1}
-        filesets = {'dataset1': {"files": fileslist, "metadata": {"xsec": 1}}}
+        xsec_dict = {data_tag: 1}
+        filesets = {data_tag: {"files": fileslist, "metadata": {"xsec": 1}}}
     
-# ### RUN THIS CELL ONLY IF YOU ARE USING SWAN 
-
-#     ##### REMEMBER TO MANUALLY COPY THE PROXY TO YOUR CERNBOX FOLDER AND TO MODIFY THE NEXT LINE
-#     os.environ['X509_USER_PROXY'] = certificate_dir
-#     if os.path.isfile(os.environ['X509_USER_PROXY']):
-#         print("Found proxy at {}".format(os.environ['X509_USER_PROXY']))
-#     else:
-#         print("os.environ['X509_USER_PROXY'] ",os.environ['X509_USER_PROXY'])
-#     os.environ['X509_CERT_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/certificates'
-#     os.environ['X509_VOMS_DIR'] = '/cvmfs/cms.cern.ch/grid/etc/grid-security/vomsdir'
-#     os.environ['X509_USER_CERT'] = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
-
-#     env_extra = [
-#                 f'export X509_USER_PROXY={os.environ["X509_CERT_DIR"]}',
-#                 f'export X509_CERT_DIR={os.environ["X509_CERT_DIR"]}',
-#                 # f'export X509_USER_PROXY={certificate_dir}',
-#                 # f'export X509_CERT_DIR={certificate_dir}',
-            # ]
-
-    import uproot
-    ff = uproot.open(fileslist[0])
-    ff.keys()
-    ff.close()
+    if not load_preexisting:
+        import uproot
+        ff = uproot.open(fileslist[0])
+        ff.keys()
+        ff.close()
     
-    # print(f"The test file read successfully. All good with certifiates.")
-    
-    # # Dask Setup:
-    # ---
-    # ### For Dask+Condor setup on lxplus
-    # #### 1.) The wrapper needs to be installed following https://github.com/cernops/dask-lxplus
-    # #### 2.) Source lcg environment in bash
-    # #### `source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh`
-    # #### Singularity could work but not confirmed.
-    # ---
-    # ### For Coffea-Casa, the client must be specified according to the user that is logged into the Coffea-Casa Environment.
-    # #### 1.) go to the left of this coffea-casa session to the task bar and click the orange-red button; it will say "Dask" if you hover your cursor over it
-    # #### 2.) scroll down to the blue box where it shows the "Scheduler Address"
-    # #### 3.) write that full address into the dask Client function 
-    # #### Example: `client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")`
-    # ---
-    # ### For CMSLPC, the client must be specified with the LPCCondorCluster
-    # #### 1.) follow installation instructions from https://github.com/CoffeaTeam/lpcjobqueue, if you have not already done so, to get a working singularity environment with access to lpcjobqueue and LPCCondorCluster class
-    # #### 2.) import LPCCondorCluster: `from lpcjobqueue import LPCCondorCluster`
-    # #### 3.) define the client
-    # #### Example: 
-    # `cluster = LPCCondorCluster()`
-    # 
-    # `client = Client(cluster)`
-    # 
+        # print(f"The test file read successfully. All good with certifiates.")
     
     # Dask set up for Coffea-Casa only
     if(UsingDaskExecutor and CoffeaCasaEnv):
@@ -262,7 +273,7 @@ def main():
             cluster = CernCluster(
     # #             memory=config.run_options['mem_per_worker'],
     # #             disk=config.run_options.get('disk_per_worker', "20GB"),
-                # env_extra=env_extra,
+    #             env_extra=env_extra,
                 cores = 1,
                 memory = '4000MB',
                 disk = '2000MB',
@@ -348,6 +359,26 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
+    # allflav = [key for key in output.keys() if 'ptresponse' in key]
+    
+    # output['cutflow']['all_jets']
+    # output['cutflow']['gen_matched+no_dressed_lep']
+    # output['cutflow']['jetpt>15']
+    # output['cutflow']['iso jets']
+    
+    # output['ptresponse_b'].sum().value
+    
+    # # [output[key].sum().value for key in allflav]
+    # for key in allflav:
+    #     print(key, ' = ', output[key].sum().value)
+    
+    # sum([output[key].sum().value for key in allflav])
+    
+    # 36959+37286
+    
+    # output['ptresponse_unmatched'].sum()
+    # output['cutflow']['iso jets']
+    
     # ### Striching up the sample
     
     output_orig = output
@@ -370,34 +401,25 @@ def main():
             response_key = key
             break
     
-    if fine_etabins==True:
-        tag_full = tag_full+'_fineeta'
-        ptbins = output[response_key].axes["pt_gen"].edges 
-        ptbins_c = output[response_key].axes['pt_gen'].centers
-    #     ptbins = np.array([15, 40, 150, 400, 4000, 10000])
-    #     ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-        etabins = output[response_key].axes["jeteta"].edges #output['ptresponse'].axis('jeteta').edges()
-    elif one_bin==True:
-        ptbins = np.array([15, 10000])
-        ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-    #     etabins = np.array([-5, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5])
-        etabins = np.array([etabins[0], 0, etabins[-1]])
-    #     etabins = np.array([etabins[3], 0, etabins[-4]])
-    else:
-        ptbins = output[response_key].axes["pt_gen"].edges 
-    #     ptbins = ptbins[2:] #because there is a pt cut on pt gen and no point of fitting and plotting below that
-        ptbins_c = output[response_key].axes['pt_gen'].centers
-        etabins = np.array([-5.191, -3.489, -3.139, -2.853,   -2.5, -2.322,  -1.93, -1.653, -1.305, -0.783,      0,  0.783,  1.305,  1.653,   1.93,  2.322,    2.5,  2.853,  3.139,  3.489, 5.191])
-    #     etabins = np.array([-5.191, -3, -2.5, -1.3, 0, 1.3, 2.5, 3, 5.191])
-        etabins = np.array([-5.191, -3.139, -2.5, -1.305, 0., 1.305, 2.5, 3.139, 5.191])
-        
+    tag_full += '_fineeta' if fine_etabins==True else ''
     
+    ptbins = output[response_key].axes["pt_gen"].edges 
+    ptbins_c = output[response_key].axes['pt_gen'].centers
+    etabins = output[response_key].axes["jeteta"].edges
+    if one_bin==True:
+        ptbins = np.array([ptbins[0], ptbins[-1]])
+        ptbins_c = (ptbins[:-1]+ptbins[1:])/2
+        etabins = np.array([etabins[0], 0, etabins[-1]])
+    elif not fine_etabins:
+        etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
+        etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
         
     jetpt_length = len(ptbins)-1
     jeteta_length = (len(etabins)-1)//2
     
-    etabins_mod = etabins[(len(etabins)-1)//2:]
-    etabins_c = (etabins_mod[:-1]+etabins_mod[1:])/2 #output['ptresponse'].axis('jeteta').centers()
+    etabins_abs = etabins[(len(etabins)-1)//2:]
+    etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
+    # etabins_c[0]=0 ## to make eta axis look better in plots.
     
     # ptresp_edd = output[response_key].axes['ptresponse'].edges
     # plot_pt_edges = ptresp_edd[0:np.nonzero(ptresp_edd>=2.0)[0][0]]
@@ -604,15 +626,13 @@ def main():
     medians = []
     medianstds = []
     
+    # medians
+    
     # %%time
     # load_fit_res=False
     combine_antiflavour = True
-    # subsamples = ['', '_b', '_c', '_u', '_d', '_s', '_g', '_bbar', '_cbar', '_ubar', '_dbar','_sbar']
-    # subsamples = ['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar','sbar', 'q', 'qbar', 'ud', 'udbar']
     flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'unmatched']
-    # subsamples = ['all', 'b', 'bbar', 'untagged', 'q', 'ud', 'q', 'ud']
-    # subsamples = ['b']
-    # flavors = ['unmatched']
+    # flavors = ['all','all_unmatched', 'unmatched']
     print('-'*25)
     print('-'*25)
     print(f'Starting to fit each flavor in: {flavors}')
@@ -631,7 +651,7 @@ def main():
             medians.append(result["Median"][0][0])
             medianstds.append(result["MedianStd"][0][0])
             for key in result:
-                save_data(result[key], key, flav, tag_full, ptbins, etabins_mod)
+                save_data(result[key], key, flav, tag_full, ptbins, etabins_abs)
                 pass
                 
     #     print("result = ", result)
@@ -643,7 +663,7 @@ def main():
         if one_bin: #or fine_etabins:
             plot_corrections_eta(result["Median"], result["MedianStd"], ptbins, etabins_c, tag_full, flav)
         else:
-            plot_corrections(result["Median"], result["MedianStd"], ptbins_c, etabins_mod, tag_full, flav)
+            plot_corrections(result["Median"], result["MedianStd"], ptbins_c, etabins_abs, tag_full, flav)
     
     print('-----'*10)
     print("All done. Congrats!")
