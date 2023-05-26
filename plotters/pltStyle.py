@@ -31,7 +31,7 @@ def pltStyle(style='paper'):
         size_frac = 2.5
         hep_parms = plt.rcParams
         plt.rcParams['figure.figsize'] = [hep_parms['figure.figsize'][i]/size_frac for i in range(2)]
-        plt.rcParams['font.size'] = hep_parms['font.size']/size_frac*1.2
+        plt.rcParams['font.size'] = hep_parms['font.size']/size_frac*1.15
         plt.rcParams['xtick.major.size'] = plt.rcParams['ytick.major.size'] = hep_parms['xtick.major.size']/size_frac
         plt.rcParams['xtick.minor.size'] = plt.rcParams['ytick.minor.size'] = hep_parms['xtick.minor.size']/size_frac
         plt.rcParams['legend.borderpad'] = hep_parms['legend.borderpad']/size_frac

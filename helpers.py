@@ -198,6 +198,59 @@ def get_median(xvals, yvals, bin_edges, Neff):
     
     return median, medianstd
 
+from scipy.optimize import curve_fit
+def fit_response(xvals, yvals, Neff):
+    ''' fit response distribution with two consecutive gaussians
+    '''
+    if_failed = False
+    
+    # once adding weights, Neff appears to be ~1/4 - 1/3 of N when not using weights,
+    # so changing limits to match the both cases
+    if (np.sum(yvals)-Neff)/Neff<1e-5:
+        N_min_limit=50
+    else:
+        N_min_limit=15
+    
+    nonzero_bins = np.sum(yvals>0)
+    if nonzero_bins<2 or Neff<N_min_limit:
+        p2=[0,0,0]
+        chi2 = np.nan
+        cov = np.array([[np.nan]*3]*3)
+        Ndof = 0
+    else:
+        try:
+            p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
+                 ######## Second Gaussian ########
+            xfit_l = np.where(xvals>=p[1]-np.abs(p[2])*1.5)[0][0]
+            xfit_hs = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0]
+            xfit_h = xfit_hs[0] if len(xfit_hs)>0 else len(xvals)
+
+            if len(range(xfit_l,xfit_h))<6: #if there are only 3pnts, the uncertainty is infty
+                xfit_l = xfit_l-1
+                xfit_h = xfit_h+1
+                if len(range(xfit_l,xfit_h))<6:
+                    xfit_l = xfit_l-1
+                    xfit_h = xfit_h+1
+            if xfit_l<0:
+                xfit_h-=xfit_l
+                xfit_l = 0
+            xvals2 = xvals[xfit_l: xfit_h]
+            yvals2 = yvals[xfit_l: xfit_h]
+            p2, cov = curve_fit(gauss, xvals2, yvals2, p0=p)
+                         ######## End second Gaussian ########
+
+            ygaus = gauss(xvals, *p2)
+            chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
+            Ndof = len(xvals2)-3
+        except(RuntimeError):   #When fit failed
+            p2=[0,0,0]
+            chi2 = np.nan
+            cov = np.array([[np.nan]*3]*3)
+            Ndof = 0
+            if_failed = True
+            
+    return [p2, cov, chi2, Ndof, if_failed]
+
 
 barable_samples = ['b', 'c', 's', 'u', 'd']
 

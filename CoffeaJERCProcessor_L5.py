@@ -9,6 +9,7 @@ Output histograms: ptresponse histogram, pt_reco histogram for each flavor and t
 ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
 ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
 jetflavour = 'partonFlavour'
+# jetflavour = 'LHE_flavour'
 
 
 from memory_profiler import profile
@@ -151,9 +152,8 @@ class Processor(processor.ProcessorABC):
 
         ########### Redo the flavour tagging if neccesarry. LHE Flavour2 derivation has to be done before the jet cuts  ###########
         #### Some samples have a missing LHE flavour infomration ####
-        if 'LHEPart' in events.fields:
-             if 'LHE_flavour' in jetflavour:
-                raise ValueError(f"jet flavour is chosen as {jetflavour}, but the sample does not contain 'LHEPart' "+
+        if (not 'LHEPart' in events.fields) and ('LHE_flavour' in jetflavour):
+            raise ValueError(f"jet flavour is chosen as {jetflavour}, but the sample does not contain 'LHEPart' "+
                                  ", so the jet flavour cannot be recalculated.")
              
         if jetflavour=='LHE_flavour_2':
@@ -162,31 +162,9 @@ class Processor(processor.ProcessorABC):
         ############ Jet selection ###########
         # Require that at least one gen jet is matched
         jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
+        selected_jets = jets[jet_gen_match_mask]
+        output['cutflow'].fill(cutflow='gen_matched', weight=ak.sum(ak.num(selected_jets)))
 
-        # Require no matched (dressed) leptons in the jet;
-        # Leptons are often misreconstructed as jets and can ruin the comparison between different samples.
-        genpart = selectedEvents.GenPart
-        lepton_mask = (
-                ((np.abs(genpart.pdgId) == 11) | (np.abs(genpart.pdgId) == 13) | (np.abs(genpart.pdgId) == 15 ))
-                & (genpart.statusFlags>>13&1 == 1) 
-                & (genpart.statusFlags&1 == 1)
-        )
-        leptons = genpart[lepton_mask]
-        drs = jets.metric_table(leptons, return_combinations=False, axis=1 )
-        matched_with_promt_lep = np.any((drs<0.4),axis=2)
-        jet_mask = jet_gen_match_mask  & np.logical_not(matched_with_promt_lep)
-            
-        selected_jets = jets[jet_mask]
-        output['cutflow'].fill(cutflow='gen_matched+no_dressed_lep', weight=ak.sum(ak.num(selected_jets)))
-
-        jet_pt_mask = selected_jets.matched_gen.pt>15
-        ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
-        ## otherwise after the correction .matched_gen field is not found.
-        jet_pt_mask_shape = ak.num(jet_pt_mask)
-        jet_pt_mask_np = ak.flatten(jet_pt_mask).to_numpy()
-        jet_pt_mask = ak.unflatten(jet_pt_mask_np.data, jet_pt_mask_shape)
-        selected_jets = selected_jets[jet_pt_mask]
-        output['cutflow'].fill(cutflow='jetpt>15', weight=ak.sum(ak.num(selected_jets)))
         ############ Apply Jet energy corrections on the jets ###########
         # define variables needed for corrected jets
         # https://coffeateam.github.io/coffea/notebooks/applying_corrections.html#Applying-energy-scale-transformations-to-Jets
@@ -198,26 +176,88 @@ class Processor(processor.ProcessorABC):
         events_cache = selectedEvents.caches[0]
 
         reco_jets = self.jet_factory.build(selected_jets, lazy_cache=events_cache)
-        
-        ######### Alpha cut = cut on the additional jet activity  ############
+        selectedEvents = selectedEvents #[:100]
+        reco_jets = reco_jets #[:100]
+
+        # print("---"*10)
+        # print("Before alpha cut")
+        # print("recojetpt = ", reco_jets.pt)
+        # print("genjetpt = ", reco_jets.matched_gen.pt)
+
+        # Require no matched (dressed) leptons in the jet;
+        # Leptons are often misreconstructed as jets and can ruin the comparison between different samples.
+        genpart = selectedEvents.GenPart
+        lepton_mask = (
+                ((np.abs(genpart.pdgId) == 11) | (np.abs(genpart.pdgId) == 13) | (np.abs(genpart.pdgId) == 15 ))
+                & (genpart.statusFlags>>13&1 == 1) 
+                & (genpart.statusFlags&1 == 1)
+        )
+        leptons = genpart[lepton_mask]
+
+        drs = reco_jets.metric_table(leptons, return_combinations=False, axis=1 )
+        matched_with_promt_lep = np.any((drs<0.4),axis=2)
+        # jet_mask = np.logical_not(matched_with_promt_lep)
+        # reco_jets = reco_jets[np.logical_not(matched_with_promt_lep)]
+        # output['cutflow'].fill(cutflow='no_dressed_lep', weight=ak.sum(ak.num(reco_jets)))
+
+        tight_jet = (reco_jets.jetId >> 2 & 1)
+        # reco_jets = reco_jets[tight_jet==True]
+
+        # At least one matched (dressed) electron/muon found
+        # dressed_electron_mask = ak.sum(ak.is_none(reco_jets.matched_electrons,axis=2), axis=2)==2
+        # dressed_muon_mask     = ak.sum(ak.is_none(reco_jets.matched_muons,axis=2), axis=2)==2
+        # reco_jets = reco_jets[dressed_electron_mask & dressed_muon_mask]
+        output['cutflow'].fill(cutflow='no_dressed_lep', weight=ak.sum(ak.num(reco_jets)))
+
+
+        jet_pt_mask = reco_jets.matched_gen.pt>15
+        ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
+        ## otherwise after the correction .matched_gen field is not found.
+        jet_pt_mask_shape = ak.num(jet_pt_mask)
+        jet_pt_mask_np = ak.flatten(jet_pt_mask).to_numpy()
+        jet_pt_mask = ak.unflatten(jet_pt_mask_np.data, jet_pt_mask_shape)
+        reco_jets = reco_jets[jet_pt_mask]
+        output['cutflow'].fill(cutflow='jetpt>15', weight=ak.sum(ak.num(reco_jets)))
+
+        ######### Alpha cut = cut on the additional jet activity  ############        
+        # alphacut = 1.0
         if "QCD" in dataset:
+            alphacut = 1.0 #if the alpha cut is different from the default
             # Correctly/safely treat the cases where there are less then 3 jets left after the cuts
             # select only the first three jets on QCD samples
             # to avoid effects due to a non-physical jet spectrum 
-            reco_jetspt = ak.pad_none(reco_jets.pt,3, axis=1, clip=True)
-            alpha = reco_jetspt[:,2]/(reco_jetspt[:,0]+reco_jetspt[:,1])
+            reco_jetspt = ak.pad_none(reco_jets.pt, 3, axis=1, clip=True)
+            # reco_jetspt = reco_jets.pt
+            # print("---"*10)
+            # print("Leading 3")
+            # print("num recopt = ", ak.num(reco_jetspt))
+            # print("recojetpt = ", reco_jetspt)
+        # print("genjetpt = ", reco_jets.matched_gen.pt[:10])
+
+            alpha = reco_jetspt[:,2]*2/(reco_jetspt[:,0]+reco_jetspt[:,1])
             alpha = ak.fill_none(alpha,0)
 
-            reco_jets = reco_jets[alpha<0.2]
-            selectedEvents = selectedEvents[alpha<0.2]
+            reco_jets = reco_jets[alpha<alphacut][:,:3]
+            selectedEvents = selectedEvents[alpha<alphacut]
         elif 'DY' in dataset:
+            alphacut = 1.0 #if the alpha cut is different from the default
             reco_jetspt = ak.pad_none(reco_jets.pt, 2, axis=1, clip=True)
-            alpha = reco_jets[:,2].pt/ak.sum(leptons.pt,axis=1)
+            # reco_jetspt = reco_jets.pt
+            # print(reco_jetspt[:50])
+            alpha = reco_jetspt[:,1]/ak.sum(leptons.pt,axis=1)
             alpha = ak.fill_none(alpha,0)
-            reco_jets = reco_jets[alpha<0.2]
-            selectedEvents = selectedEvents[alpha<0.2]
-        output['cutflow'].fill(cutflow='alpha<0.2; leading jets', weight=ak.sum(ak.num(reco_jets)))
-        output['cutflow'].fill(cutflow='events, alpha<0.2',       weight=len(selectedEvents))
+            reco_jets = reco_jets[alpha<alphacut][:,:2]
+            selectedEvents = selectedEvents[alpha<alphacut]
+        output['cutflow'].fill(cutflow=f'alpha cut; leading jets', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow'].fill(cutflow=f'events, alpha cut',       weight=len(selectedEvents))
+        
+        # print("---"*10)
+        # print("After alpha cut")
+        # print("recojetpt = ", reco_jets.pt)
+        # print("genjetpt = ", reco_jets.matched_gen.pt)
+        # print("After pt_gen>15 cut")
+        # print("recojetpt = ", reco_jets.pt)
+        # print("genjetpt = ", reco_jets.matched_gen.pt   )
 
         # Cut on overlapping jets
         drs, _ = reco_jets.metric_table(reco_jets, return_combinations=True, axis=1)
@@ -227,8 +267,8 @@ class Processor(processor.ProcessorABC):
         gen_jets = reco_jets.matched_gen
 
         ############ Derive LHE flavour   ###########
-        if jetflavour=='LHE_flavour_2':
-                reco_jets = get_LHE_flavour(reco_jets, selectedEvents)      
+        if jetflavour=='LHE_flavour':
+            reco_jets = get_LHE_flavour(reco_jets, selectedEvents)      
         
         jet_flavour = reco_jets[jetflavour] 
 

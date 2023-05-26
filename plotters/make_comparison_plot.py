@@ -5,26 +5,17 @@ from scipy.interpolate import CubicSpline
 from coffea import util
 from cycler import cycler
 import os
+import mplhep as hep
     
 from common_binning import JERC_Constants
 
-### Some recent file to get out the binning
-outname = '../out/CoffeaJERCOutputs_L5_QCD-MG-Py.coffea'
-output = util.load(outname)
-ptbins = output['HT50to100']['ptresponse_b'].axes['pt_gen'].edges
-ptbins_c = output['HT50to100']['ptresponse_b'].axes['pt_gen'].centers
-etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
-# etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
-etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
-    
-etabins_abs = etabins[(len(etabins)-1)//2:]
-etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
-
-
 def make_comparison_plot(data_dict,
                               function_dict,
+                              etabins_abs=np.array(JERC_Constants.etaBinsEdges_CaloTowers_full()),
+                              ptbins=np.array(JERC_Constants.ptBinsEdgesMCTruth()),
                               etaidx=0, flav='',
-                              ratio_name='ratio'):
+                              ratio_name='ratio',
+                              inverse=True):
     ''' Make a plot of the jet energy response vs pt for the data points in the dictionary `data_dict`
     Copare with with lines obtained from coffea evaluators in `function_dict`.
     `function_dict` can be None than, no lines are shown.
@@ -34,16 +25,18 @@ def make_comparison_plot(data_dict,
     '''
    
     keys = [key for key in data_dict.keys()]
-    start = np.searchsorted(ptbins, 15, side='left')
+    start = np.searchsorted(ptbins, 20, side='left')
+    end = 27
 
-    yvals = np.array([key[0][start:,etaidx] for key in data_dict.values()])
-    stds  = np.array([key[1][start:,etaidx] for key in data_dict.values()])
-    reco_pts  = np.array([key[2][start:,etaidx] if len(key[2].shape)==2 else key[2][start:] for key in data_dict.values()])
+    yvals = np.array([key[0][start:end,etaidx] for key in data_dict.values()])
+    # end = np.min([len(yv) for yv in yvals])+start #cut, so that all yvals are the same
+    stds  = np.array([key[1][start:end,etaidx] for key in data_dict.values()])
+    reco_pts  = np.array([key[2][start:end,etaidx] if len(key[2].shape)==2 else key[2][start:end] for key in data_dict.values()])
 
 
     ### Replacing response values to corrections
-    inverse=True
-    use_recopt=True
+    # inverse=False
+    use_recopt=inverse
 
     # yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
     yvals[(yvals==0) | (np.abs(yvals)==np.inf)] = np.nan
@@ -71,8 +64,11 @@ def make_comparison_plot(data_dict,
 
     xvals = reco_pts if use_recopt else np.array([((ptbins[start:-1] + ptbins[start+1:])/2)]*len(yvals))
     validx = (xvals>0)*(yvals>0)
-    xvals_cont = {name: np.geomspace(np.min(xv[valx]), np.max(xv[valx]), 100)
-                  for xv, valx, name in zip(xvals, validx, function_dict.keys())}
+    # xvals_cont = {name: np.geomspace(np.min(xv[valx]), np.max(xv[valx]), 100)
+    #               for xv, valx, name in zip(xvals, validx, function_dict.keys())}
+    
+    xvals_cont = np.geomspace(np.min(xvals[validx])-2, np.max(xvals[validx])+100, 100)
+                                    # for name in function_dict.keys()}
     ### values for splines can only be in a valid range while for corrections evaluators they can go out of range
     ### so one needs to define two xvals
     validx_all = np.logical_not(np.any(np.logical_not(validx), axis=0))
@@ -103,7 +99,7 @@ def make_comparison_plot(data_dict,
     yvals_spline = {}
     for name in function_dict.keys():
         correction_fnc, closure = function_dict[name]
-        xv_cont = xvals_cont[name]
+        xv_cont = xvals_cont
         if closure is None or closure==1:
             def closure(a,b):
                 return np.ones_like(a*b)
@@ -115,8 +111,11 @@ def make_comparison_plot(data_dict,
 #         assert False
         if corr_bin_idx==len(corr_etabins):
             corr_bin_idx-=1
-        eta_str = r'{:0.2f}$<\eta<${:0.2f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
-        ax.plot(xv_cont, yvals_cont[name], label=name, markersize=0) # +', '+eta_str, markersize=0)
+        if 'Winter' in name:
+            eta_str = ', \n'+r' {:0.2f}$<\eta<${:0.2f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
+        else:
+            eta_str = ''
+        ax.plot(xv_cont, yvals_cont[name], label=name+eta_str, markersize=0) # +', '+eta_str, markersize=0)
 
     ############################ Data ratio plot ######################################
     ax2.hlines(1,1, 10000, linestyles='--',color="black",
@@ -174,11 +173,14 @@ def make_comparison_plot(data_dict,
         yerr_norm = np.concatenate([stds])
         y_norm = np.concatenate([yvals])
         norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)
-        ax.set_ylim(np.min((y_norm-yerr_norm)[norm_pos]), np.max((yerr_norm+y_norm)[norm_pos]) +0.010)
+        left_lim = np.min((y_norm-yerr_norm)[norm_pos])
+        right_lim = np.max((yerr_norm+y_norm)[norm_pos])
+        lim_pad = (right_lim - left_lim)/1.5
+        ax.set_ylim(left_lim, right_lim+lim_pad)
 
         yerr_norm = np.concatenate(data_model_ratio_unc)
         y_norm = np.concatenate(data_model_ratio)
-        norm_pos = (yerr_norm<0.008) &  (yerr_norm != np.inf) & (y_norm>-0.1)  
+        norm_pos = (yerr_norm<0.008) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         if ~np.any(norm_pos):
             print("Cannot determine ylimits")
             norm_pos = np.ones(len(yerr_norm), dtype=int)
@@ -187,7 +189,8 @@ def make_comparison_plot(data_dict,
             right_lim = np.max((yerr_norm+y_norm)[norm_pos])
             lim_pad = (right_lim - left_lim)/5
             ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
-
+            print(f"right lim = {right_lim}") 
+        
         
     xlabel = r'$p_{T,reco}$ (GeV)' if use_recopt else r'$p_{T,ptcl}$ (GeV)'
     ax2.set_xlabel(xlabel);
@@ -225,6 +228,7 @@ def make_comparison_plot(data_dict,
         os.mkdir(dir_name2)
         print("Creating directory ", dir_name2)
 
+    hep.label.exp_text(text=f'$ {etabins_abs[etaidx]}<\eta<{etabins_abs[etaidx+1]}$, {flav} jets', loc=0, ax=ax)
     fig_name = dir_name2+'/'+run_name+"_"+flav+eta_string
     print("Saving plot for eta = ", eta_string)
     print("Saving plot with the name = ", fig_name+".pdf / .png")
@@ -237,9 +241,24 @@ from helpers import read_data as read_data_orig
 def read_data(mean_name, flav, tag1):
     return read_data_orig(mean_name, flav, tag1, '../')
 
+### Some recent file to get out the binning
+outname = '../out/CoffeaJERCOutputs_L5_QCD-MG-Py_alphacut_0p2.coffea'
+output = util.load(outname)
+ptbins = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].edges
+ptbins_c = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].centers
+etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
+# etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
+etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
+    
+etabins_abs = etabins[(len(etabins)-1)//2:]
+etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
+
+
 def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
                             ratio_name='ratio'):
     ''' Make a double ratio plot for comparing flavor vs anti-flavor responses
+    To do:
+    make it work with input parameters of ptbins and etabins, not the ones real at the top
     '''
         
     median_1 = read_data("Median", flav, outputname1)

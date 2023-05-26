@@ -85,7 +85,7 @@ def main():
     # ### Parameters of the run and switches
     
     UsingDaskExecutor = True   ### True if use dask local executor, otherwise use futures
-    CERNCondorCluster = True   ### True if run on the CERN condor cluster using dask. Requires `UsingDaskExecutor` = True
+    CERNCondorCluster = False   ### True if run on the CERN condor cluster using dask. Requires `UsingDaskExecutor` = True
     CoffeaCasaEnv     = False   ### True if run on coffea case. Never tested since ages.
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False   ### True if run only on one file and five chuncs to debug processor
@@ -96,7 +96,7 @@ def main():
     fine_etabins      = False   
     one_bin           = False   ### Unite all eta and pt bins in one
     
-    Nfiles = -1                 ### -1 for all files
+    Nfiles = 5                 ### -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
@@ -104,10 +104,10 @@ def main():
     ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'QCD-MG-Her' 
-    # data_tag = 'DY-FxFx'
+    # data_tag = 'QCD-MG-Py' 
+    data_tag = 'Pythia-TTBAR'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '_alphacut_0p2'  
+    add_tag = '_finallepcut' #_noleptoncut 5files _tight_jetId #_noleptoncut  
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
@@ -136,7 +136,7 @@ def main():
         
     
     if not (fileslist is None):
-        print(f'A specific filelist specified. The calculation will be run on the files {filelist}')
+        print(f'A specific fileslist specified. The calculation will be run on the files {fileslist}')
     elif data_tag in dataset_dictionary.keys():
         dataset = dataset_dictionary[data_tag]
         print(f'The data tag "{data_tag}" found in the dataset_dictionary. The dataset "{dataset}" will be used.')
@@ -288,7 +288,7 @@ def main():
                 },
                 job_extra = {
                     'MY.JobFlavour': '"longlunch"',
-                    'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
+                    # 'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
                 },
             )
             cluster.adapt(minimum=2, maximum=200)
@@ -296,7 +296,7 @@ def main():
             client = Client(cluster)
         
         client.upload_file('CoffeaJERCProcessor'+tag_Lx+'.py')
-        client.upload_file('count_2d.py')
+        client.upload_file('LHE_flavour.py')
         client.upload_file('common_binning.py')
     
         client
@@ -632,7 +632,7 @@ def main():
     # %%time
     # load_fit_res=False
     combine_antiflavour = True
-    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'unmatched']
+    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'all_unmatched', 'unmatched']
     # flavors = ['all','all_unmatched', 'unmatched']
     print('-'*25)
     print('-'*25)
