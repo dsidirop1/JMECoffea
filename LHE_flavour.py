@@ -1,7 +1,53 @@
 # LHE_flavour.py
 import awkward as ak
 import numpy as np
-from count_2d import count_2d
+import numba as nb
+
+''' numba implementation of a function similar to ak.count that works on 2d arrays
+counts the number of times each element appears in the each subarray.
+Output: the list of the same size as 'data', but each element is replaced by the number of times it is repeated in the subarray.
+numba+awkward array example emplementation taken from
+https://github.com/scikit-hep/awkward/discussions/902#discussioncomment-844323
+'''
+
+### The wrapper to make numba+awkward work
+def njit_at_dim(dim=1):
+    def wrapper(impl_dim):
+        def token(data, builder):
+            pass
+
+        def impl_nd(data, builder):
+            for inner in data:
+                builder.begin_list()
+                token(inner, builder)
+                builder.end_list()
+            return builder
+
+        @nb.extending.overload(token)
+        def dispatch(data, builder):
+            if data.type.ndim == dim:
+                return impl_dim
+            else:
+                return impl_nd
+
+        @nb.njit
+        def jitted(data, builder):
+            return token(data, builder)
+
+        return jitted
+    return wrapper
+
+### The implementation part
+@njit_at_dim()
+def count_2d(data, builder):
+    for ii in range(len(data)):
+        count = 0
+        a = data[ii]
+        for jj in range(len(data)):
+            if a==data[jj]:
+                count+=1
+        builder.integer(count)
+    return builder
 
 
 def get_LHE_flavour_2(jets, selectedEvents):
@@ -39,7 +85,7 @@ def get_LHE_flavour_2(jets, selectedEvents):
     ### Some LHE particles might point to the same LHE partons. Those are kept unmatched.
     LHE_flavour_np_2[arms_np[ak.num(LHE_match_flat)>0][aa_np>1]] = -999 
 
-    jets["LHE_Flavour2"] = ak.unflatten(LHE_flavour_np_2, jet_shape2)
+    jets["LHE_flavour2"] = ak.unflatten(LHE_flavour_np_2, jet_shape2)
 
     return jets
 
@@ -89,5 +135,5 @@ def get_LHE_flavour(reco_jets, selectedEvents):
     b_criteria_unknown = ak.flatten(bbar_criteria & b_criteria).to_numpy()
     LHE_flavour_np[b_criteria_unknown] = 0
 
-    reco_jets["LHE_Flavour"] = ak.unflatten(LHE_flavour_np, jet_shape) 
+    reco_jets["LHE_flavour"] = ak.unflatten(LHE_flavour_np, jet_shape) 
     return reco_jets
