@@ -126,16 +126,16 @@ def sum_subhist(output, histo_key, scales):
     return new_hist
 
 
-def save_data(data, name, flavor, tag, ptbins, etabins):
-    data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins[:-1])}
+def save_data(data, name, flavor, tag, ptbins_centres, etabins, path='out_txt'):
+    data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins_centres)}
     data_dict['etaBins'] = np.array([str(etaBin) for etaBin in etabins[:-1]])
 
     df = pd.DataFrame(data=data_dict)
     df = df.set_index('etaBins')
-    df.to_csv('out_txt/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
+    df.to_csv(path+'/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
 
-def read_data(name, flavor, tag, rel_path=''):
-    df_csv = pd.read_csv(rel_path+'out_txt/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv').set_index('etaBins')
+def read_data(name, flavor, tag, path='out_txt'):
+    df_csv = pd.read_csv(path+'/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv').set_index('etaBins')
     return df_csv.to_numpy().transpose()
 
 def xsecstr2float(str_input):
@@ -324,3 +324,6 @@ def slice_histogram(response_hist, recopt_hist, etabins, etaidx, pt_lo, pt_hi):
 
     return histo, histopt, eta_string
 
+legend_labels = {"ttbar": {"lab":"$t\overline{\, t\!}$",
+                            "short": "ttbar"},
+                            }

@@ -54,7 +54,6 @@ def main():
     
     import time
     import scipy.stats as ss
-    from scipy.optimize import curve_fit
     from coffea import processor, util
     from coffea.nanoevents import NanoAODSchema, BaseSchema
     
@@ -75,7 +74,7 @@ def main():
     
     ### import subpackages
     from helpers import hist_add, hist_mult, hist_div, dictionary_pattern, sum_subhist, xsecstr2float
-    from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors
+    from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors, fit_response
     from plotters.plotters import plot_response_dist, plot_corrections, plot_corrections_eta
     
     from helpers import rebin_hist, mirror_eta_to_plus, sum_neg_pos_eta, find_ttbar_xsec
@@ -91,12 +90,17 @@ def main():
     test_run          = False   ### True if run only on one file and five chuncs to debug processor
     load_fit_res      = False   ### True if only replot the fit results
     
-    ### If True use JERC default binning, if False, merge bins into the Run 1 binning (binning in HCal sectors) 
-    ### Preprocessing always done in many bins
-    fine_etabins      = False   
+    ### Choose eta binning for the response fits.
+    ### HCalPart: bin in HCal sectors, CaloTowers: the standard JERC binning,
+    ### CoarseCalo: like 'CaloTowers' but many bins united; onebin: combine all eta bins
+    ### Preprocessing always done in CaloTowers
+    eta_binning  = "JERC"  ### HCalPart, CoarseCalo, JERC, CaloTowers, onebin;
+    sum_neg_pos_eta_bool=True  ### if combining the positive and negative eta bins
+    
+    fine_etabins      = True   
     one_bin           = False   ### Unite all eta and pt bins in one
     
-    Nfiles = 5                 ### -1 for all files
+    Nfiles = -1                 ### -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
@@ -104,18 +108,21 @@ def main():
     ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    # data_tag = 'QCD-MG-Py' 
-    data_tag = 'Pythia-TTBAR'
+    data_tag = 'Pythia-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
+    # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '_finallepcut' #_noleptoncut 5files _tight_jetId #_noleptoncut  
+    add_tag = '' #_Aut18binning   
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
     # fileslist = ['root://xrootd-cms.infn.it/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2510000/056516']
     
+    tag_full = tag_Lx+'_'+data_tag+add_tag
+    
     # ### Dataset parameters
     
     dataset = None
+    dataset='fileNames/TTToSemi20UL18_JMENano.txt'
     fileslist = None
     
     dataset_dictionary = {
@@ -161,6 +168,7 @@ def main():
     
     #Import the correct processor
     Processor = importlib.import_module('CoffeaJERCProcessor'+tag_Lx).Processor
+    # Processor = importlib.import_module('GetAlphaDristributionProcessor').Processor
     
     tag_full = tag_Lx+'_'+data_tag+add_tag
     if test_run:
@@ -169,11 +177,11 @@ def main():
     
     tag_fit_res = tag_full
     
-    if fine_etabins:
-        tag_fit_res=tag_full+'_fine_etaBins'
+    if eta_binning != "HCalPart":
+        tag_fit_res=tag_full+'_'+eta_binning
     
-    if one_bin:
-        tag_fit_res=tag_fit_res+'_oneBin'
+    # if one_bin:
+    #     tag_fit_res=tag_fit_res+'_oneBin'
         
     if load_preexisting == True:
         UsingDaskExecutor = False
@@ -183,20 +191,20 @@ def main():
         
     if not os.path.exists("out"):
         os.mkdir("out")
-        
-    if not os.path.exists("out_txt"):
-        os.mkdir("out_txt")
-        
+            
     if not os.path.exists("fig"):
         os.mkdir("fig/")
         os.mkdir("fig/responses/")
         
     if test_run and not os.path.exists("test"):
         os.mkdir("test/")
-        os.mkdir("test/out_txt")
         os.mkdir("test/fig")
         
-    maxchunks = 5 if test_run else None
+    out_txt_path = "out_txt" if not test_run else "test/out_txt"
+    if not os.path.exists(out_txt_path):
+        os.mkdir(out_txt_path)
+        
+    maxchunks = 100 if test_run else None
     if test_run:
         Nfiles = 1
     
@@ -288,7 +296,7 @@ def main():
                 },
                 job_extra = {
                     'MY.JobFlavour': '"longlunch"',
-                    # 'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
+    #                 'transfer_input_files': '/afs/cern.ch/user/a/anpotreb/top/JERC/JMECoffea/count_2d.py',
                 },
             )
             cluster.adapt(minimum=2, maximum=200)
@@ -296,6 +304,7 @@ def main():
             client = Client(cluster)
         
         client.upload_file('CoffeaJERCProcessor'+tag_Lx+'.py')
+        client.upload_file('GetAlphaDristributionProcessor.py')
         client.upload_file('LHE_flavour.py')
         client.upload_file('common_binning.py')
     
@@ -310,7 +319,7 @@ def main():
     seed = 1234577890
     prng = RandomState(seed)
     chunksize = 10000
-    # maxchunks = 20
+    # maxchunks = 100
     
     if not load_preexisting:
         if not UsingDaskExecutor:
@@ -360,26 +369,6 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
-    # allflav = [key for key in output.keys() if 'ptresponse' in key]
-    
-    # output['cutflow']['all_jets']
-    # output['cutflow']['gen_matched+no_dressed_lep']
-    # output['cutflow']['jetpt>15']
-    # output['cutflow']['iso jets']
-    
-    # output['ptresponse_b'].sum().value
-    
-    # # [output[key].sum().value for key in allflav]
-    # for key in allflav:
-    #     print(key, ' = ', output[key].sum().value)
-    
-    # sum([output[key].sum().value for key in allflav])
-    
-    # 36959+37286
-    
-    # output['ptresponse_unmatched'].sum()
-    # output['cutflow']['iso jets']
-    
     # ### Striching up the sample
     
     output_orig = output
@@ -396,30 +385,38 @@ def main():
     
     # Define some global variables for the fit
     
+    # ptbins = output[response_key].axes["pt_gen"].edges 
+    # ptbins_c = output[response_key].axes['pt_gen'].centers
+    
     ## find the first response histogram to extract the axes
-    for key in output.keys():
-        if 'response' in key:
-            response_key = key
-            break
+    # for key in output.keys():
+    #     if 'response' in key:
+    #         response_key = key
+    #         break
     
-    tag_full += '_fineeta' if fine_etabins==True else ''
+    # tag_full += '_fineeta' if fine_etabins==True else ''
+    from JetEtaBins import JetEtaBins, PtBins
     
-    ptbins = output[response_key].axes["pt_gen"].edges 
-    ptbins_c = output[response_key].axes['pt_gen'].centers
-    etabins = output[response_key].axes["jeteta"].edges
-    if one_bin==True:
-        ptbins = np.array([ptbins[0], ptbins[-1]])
-        ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-        etabins = np.array([etabins[0], 0, etabins[-1]])
-    elif not fine_etabins:
-        etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
-        etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
+    # ptbins = output[response_key].axes["pt_gen"].edges 
+    # ptbins_c = output[response_key].axes['pt_gen'].centers
+    # etabins = output[response_key].axes["jeteta"].edges
+    
+    jeteta_bins = JetEtaBins(eta_binning)
+    pt_bins = PtBins("MC_truth")
+    fiteta_bins = JetEtaBins(eta_binning, absolute=True) if sum_neg_pos_eta_bool else jeteta_bins
+    # if one_bin==True:
+    #     ptbins = np.array([ptbins[0], ptbins[-1]])
+    #     ptbins_c = (ptbins[:-1]+ptbins[1:])/2
+    #     etabins = np.array([etabins[0], 0, etabins[-1]])
+    # elif not fine_etabins:
+    #     etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
+    #     etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
         
-    jetpt_length = len(ptbins)-1
-    jeteta_length = (len(etabins)-1)//2
+    # jetpt_length = len(ptbins)-1
+    # jeteta_length = (len(etabins)-1)//2
     
-    etabins_abs = etabins[(len(etabins)-1)//2:]
-    etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
+    # etabins_abs = etabins[(len(etabins)-1)//2:]
+    # etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
     # etabins_c[0]=0 ## to make eta axis look better in plots.
     
     # ptresp_edd = output[response_key].axes['ptresponse'].edges
@@ -462,89 +459,35 @@ def main():
         output = output_comb
         tag_full = tag + '_LHEflav1_TTBAR-Inclusive-JME'
     
-    def fit_response(xvals, yvals, Neff):
-        if_failed = False
-        
-        # once adding weights, Neff appears to be ~1/4 - 1/3 of N when not using weights,
-        # so changing limits to match the both cases
-        if (np.sum(yvals)-Neff)/Neff<1e-5:
-            N_min_limit=50
-        else:
-            N_min_limit=15
-        
-        nonzero_bins = np.sum(yvals>0)
-        if nonzero_bins<2 or Neff<N_min_limit:
-            p2=[0,0,0]
-            chi2 = np.nan
-            cov = np.array([[np.nan]*3]*3)
-            Ndof = 0
-        #                 print("Too little data points, skipping p = ", p2)
-        else:
-            try:
-                p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
-                     ######## Second Gaussian ########
-                xfit_l = np.where(xvals>=p[1]-np.abs(p[2])*1.5)[0][0]
-                xfit_hs = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0]
-                xfit_h = xfit_hs[0] if len(xfit_hs)>0 else len(xvals)
-        #                     print("xfit_l = ", xfit_l, ", xfit_h = ", xfit_h)
+    jeteta_bins.idx2str(2,precision=3)
+    pt_bins.idx2str(2)
     
-                if len(range(xfit_l,xfit_h))<6: #if there are only 3pnts, the uncertainty is infty
-                    xfit_l = xfit_l-1
-                    xfit_h = xfit_h+1
-                    if len(range(xfit_l,xfit_h))<6:
-                        xfit_l = xfit_l-1
-                        xfit_h = xfit_h+1
-                if xfit_l<0:
-                    xfit_h-=xfit_l
-                    xfit_l = 0
-                xvals2 = xvals[xfit_l: xfit_h]
-                yvals2 = yvals[xfit_l: xfit_h]
-        #                     if ptBin.lo>290:
-        #                         print("xfit_l = ", xfit_l, ", h = ", xfit_h)
-        #                         print("yvals = ", yvals)
-        #                         print("yvals2 = ", yvals2)
-                p2, cov = curve_fit(gauss, xvals2, yvals2, p0=p)
-                             ######## End second Gaussian ########
-    
-                ygaus = gauss(xvals, *p2)
-                chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
-                Ndof = len(xvals2)-3
-        #                     if chi2<50000:
-        #                         pass
-        #                         print("Fit converged, p = ", p2, ", chi2 = ", chi2 )
-        #                     else:
-        #                         print("Fit failed because of high chi2, p = ", p2, ", chi2 = ", chi2 )
-            except(RuntimeError):   #When fit failed
-                p2=[0,0,0]
-        #                     print("Fit failed because of non-convergance, p = ", p2)
-                chi2 = np.nan
-                cov = np.array([[np.nan]*3]*3)
-                Ndof = 0
-                if_failed = True
-                
-        return [p2, cov, chi2, Ndof, if_failed]
+    # etabins
     
     import warnings
     # warnings.filterwarnings('ignore') ### To suppress warnings with bad
     
     def fit_responses(output, flavor='b'):
-        warnings.filterwarnings('ignore')
+        ''' Extract the jet flavor `flavor` from the histogram dictionary `output` and fit in all the eta and pt bins.
+        Return a dictionary of ["Mean", "MeanVar", "Median", "MedianStd", "MeanRecoPt"] values.
+        
+        '''
+        warnings.filterwarnings('ignore')  ### filter out the many fit warnings
         saveplots = True
-        if test_run or fine_etabins:
+        if test_run or eta_binning != "HCalPart":
             saveplots = False
         saveplots = False
             
         response_hist, recopt_hist = add_flavors(output, flavor, combine_antiflavour)
         
-        response_hist = rebin_hist(response_hist, 'jeteta' , etabins)
-        recopt_hist = rebin_hist(recopt_hist, 'jeteta' , etabins)
+        response_hist = rebin_hist(response_hist, 'jeteta' , jeteta_bins.edges)
+        recopt_hist = rebin_hist(recopt_hist, 'jeteta' , jeteta_bins.edges)
         
-        sum_neg_pos_eta_bool=True
         if sum_neg_pos_eta_bool==True:
             response_hist = sum_neg_pos_eta(response_hist)
             recopt_hist = sum_neg_pos_eta(recopt_hist)
             
-        results = {key:np.zeros((jetpt_length, jeteta_length))
+        results = {key:np.zeros((pt_bins.nbins, fiteta_bins.nbins))
                       for key in ["Mean", "MeanVar", "Median", "MedianStd", "MeanRecoPt"]  }
                                 
         N_converge = 0
@@ -564,27 +507,26 @@ def main():
         xvals = response_hist.axes['ptresponse'].centers[1:] #[1:] to exclude the second peak for low pt
         response_edges = response_hist.axes['ptresponse'].edges[1:]
     
-        for i in range(jetpt_length):
-            pt_lo = ptbins[i]
-            pt_hi = ptbins[i+1]
-        #         print('-'*25)
+        for i in range(pt_bins.nbins):
+    #         pt_lo = ptbins[i]
+    #         pt_hi = ptbins[i+1]
+    #     #         print('-'*25)
     
-            if not np.isinf(pt_hi):
-                pt_string = '_pT'+str(int(pt_lo))+'to'+str(int(pt_hi))
-            else:
-                pt_string = '_pT'+str(pt_lo) + 'to' + str(pt_hi)
-                pt_string = pt_string.replace('.0','').replace('-infto','0to')
+    #         if not np.isinf(pt_hi):
+    #             pt_string = '_pT'+str(int(pt_lo))+'to'+str(int(pt_hi))
+    #         else:
+    #             pt_string = '_pT'+str(pt_lo) + 'to' + str(pt_hi)
+    #             pt_string = pt_string.replace('.0','').replace('-infto','0to')
     
-            for k in range(jeteta_length):
+            for k in range(fiteta_bins.nbins):
                 histo = response_hist[i, :, k]
                 histopt = recopt_hist[i, k]
                 
-                etaPl_lo = etabins[k+jeteta_length]
-                etaPl_hi = etabins[k+1+jeteta_length]
-                eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
-                eta_string = eta_string.replace('.','')
+    #             etaPl_lo = jeteta_bins.edges[k] #etabins[+jeteta_length]
+    #             etaPl_hi = jeteta_bins.edges[k+1] #etabins[k+1+jeteta_length]
+    #             eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
+    #             eta_string = eta_string.replace('.','')
                 
-    #             histo, histopt, eta_string = slice_histogram(response_hist, recopt_hist, etabins, k, pt_lo, pt_hi)
                 yvals = histo.values()[1:]     #[1:] to exclude the second peak for low pt
                 try:
                     Neff = histo.sum().value**2/(histo.sum().variance)
@@ -605,6 +547,7 @@ def main():
                 else:
                     N_converge += 1
                 
+                ####################### Store the results ############################
                 results["Mean"][i,k] = p2[1]
                 results["MeanVar"][i,k] = cov[1,1]
                 results["Median"][i,k] = median
@@ -614,7 +557,7 @@ def main():
     
         ####################### Plotting ############################
                 if  saveplots:
-                    figName = FitFigDir+'/ptResponse'+pt_string+eta_string
+                    figName = FitFigDir+'/ptResponse'+pt_bins.idx2str(i)+fiteta_bins.idx2str(i)
                     plot_response_dist(histo, xvals, p2, cov, chi2, Ndof, median, medianstd, Neff, figName)              
     
         print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
@@ -627,13 +570,14 @@ def main():
     medians = []
     medianstds = []
     
-    # medians
+    out_txt_path = 'out_txt/'
     
     # %%time
     # load_fit_res=False
     combine_antiflavour = True
-    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'all_unmatched', 'unmatched']
-    # flavors = ['all','all_unmatched', 'unmatched']
+    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'unmatched']
+    # flavors = ['b']
+    # flavors = ['all', 'all_minus_b', 'b' ,'all_unmatched', 'unmatched']
     print('-'*25)
     print('-'*25)
     print(f'Starting to fit each flavor in: {flavors}')
@@ -645,14 +589,14 @@ def main():
             result = {}
             keys = ["Mean", "MeanVar", "Median", "MedianStd", "MeanRecoPt"] 
             for key in keys:
-                result[key] = read_data(key, flav, tag_full)
+                result[key] = read_data(key, flav, tag_fit_res)
         
         else:
             result = fit_responses(output, flav)
             medians.append(result["Median"][0][0])
             medianstds.append(result["MedianStd"][0][0])
             for key in result:
-                save_data(result[key], key, flav, tag_full, ptbins, etabins_abs)
+                save_data(result[key], key, flav, tag_fit_res, pt_bins.centres, fiteta_bins.edges, out_txt_path)
                 pass
                 
     #     print("result = ", result)
@@ -662,12 +606,87 @@ def main():
         meanstd = np.sqrt(result["MeanVar"])
                 
         if one_bin: #or fine_etabins:
-            plot_corrections_eta(result["Median"], result["MedianStd"], ptbins, etabins_c, tag_full, flav)
+            plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins.edges, jfiteta_bins.centres, tag_fit_res, flav)
         else:
-            plot_corrections(result["Median"], result["MedianStd"], ptbins_c, etabins_abs, tag_full, flav)
+            plot_corrections(result["Median"], result["MedianStd"], pt_bins.centres, fiteta_bins.edges, tag_fit_res, flav)
     
     print('-----'*10)
     print("All done. Congrats!")
+    
+    # # flavor = 'g'
+    # response_hist_dict = {}
+    # for flavor in ['g', 'b', 'q']:
+    #     combine_antiflavour = True
+    #     response_hist, recopt_hist = add_flavors(output, flavor, combine_antiflavour)
+        
+    #     response_hist = rebin_hist(response_hist, 'jeteta' , jeteta_bins.edges)
+    #     recopt_hist = rebin_hist(recopt_hist, 'jeteta' , jeteta_bins.edges)
+        
+    #     if sum_neg_pos_eta_bool==True:
+    #         response_hist = sum_neg_pos_eta(response_hist)
+    #         recopt_hist = sum_neg_pos_eta(recopt_hist)
+            
+    #     results = {key:np.zeros((pt_bins.nbins, fiteta_bins.nbins))
+    #                   for key in ["Mean", "MeanVar", "Median", "MedianStd", "MeanRecoPt"]  }
+                                
+    #     N_converge = 0
+    #     N_not_converge = 0
+    
+    #     xvals = response_hist.axes['ptresponse'].centers[1:] #[1:] to exclude the second peak for low pt
+    #     response_edges = response_hist.axes['ptresponse'].edges[1:]
+    #     response_hist_dict[flavor] = response_hist
+    
+    # etaidx = 0
+    # pt_idx = 5
+    # histo_g = response_hist_dict['g'][pt_idx, :, etaidx]
+    # histo_b = response_hist_dict['b'][pt_idx, :, etaidx]
+    # histo_q = response_hist_dict['q'][pt_idx, :, etaidx]
+    # edd = histo_b.axes['ptresponse'].edges
+    # p = []
+    # for histo in [histo_b, histo_q, histo_g]:
+    #     histo = histo/histo.sum().value
+    
+    #     yvals = histo.values()[1:len(edd)-2]     #[1:] to exclude the second peak for low pt
+    #     try:
+    #         Neff = histo.sum().value**2/(histo.sum().variance)
+    #     except ZeroDivisionError:
+    #         Neff = histo.sum().value**2/(histo.sum().variance+1e-11)
+    
+    #     median, medianstd = get_median(xvals[:len(yvals)], yvals, response_edges, Neff)
+    
+    #     ####################### Fitting ############################
+    #     p2, cov, chi2, Ndof, if_failed = fit_response(xvals[:len(yvals)], yvals, Neff)
+    #     p.append(p2)
+        
+    # import mplhep as hep
+    
+    # width_ik = np.abs(p2[2])
+    # f_xvals = np.linspace(0,max(xvals),5001)
+    # fgausb = gauss(f_xvals, *p[0])
+    # fgausq = gauss(f_xvals, *p[1])
+    # fgausg = gauss(f_xvals, *p[2])
+    # # edd = histo_q.axes['ptresponse'].edges
+    # histo_q = histo_q[1:len(edd)-2] 
+    # histo_g = histo_g[1:len(edd)-2] 
+    # histo_b = histo_b[1:len(edd)-2] 
+    # histo_q = histo_q/histo_q.sum().value
+    # histo_g = histo_g/histo_g.sum().value
+    # histo_b = histo_b/histo_b.sum().value
+    
+    # fig, ax2 = plt.subplots();
+    
+    # plot = histo_b.plot1d(ax=ax2, label='b jet', histtype='fill', alpha=0.6)
+    # plot = histo_q.plot1d(ax=ax2, label='usd jet', histtype='fill', alpha=0.6)
+    # ax2.plot(f_xvals, fgausb, label='Gaus, b jet', markersize=0, linewidth=1.8, color = '#920050')
+    # ax2.plot(f_xvals, fgausq, label='Gaus, usd jet', markersize=0, linewidth=1.8, color = '#3c1fdb')
+    
+    # ax2.set_xlabel("Response ($p_{T,reco}/p_{T,ptcl}$)")
+    # max_lim = np.min([np.max(xvals), 2.0])
+    # ax2.set_xlim([0,max_lim])
+    # h = ax2.get_ylim()[1]/1.05
+    
+    # hep.label.exp_text(text=f'$ {np.round(etabins_abs[etaidx],3)}<|\eta|<{np.round(etabins_abs[etaidx+1],3)}$, '+'$p_{T, ptcl}$'+f'$ = {ptbins_c[pt_idx]}$ GeV', loc=0)
+    # plt.show(); 
     
 if __name__ == "__main__":
     main()

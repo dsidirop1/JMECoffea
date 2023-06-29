@@ -6,37 +6,46 @@ from coffea import util
 from cycler import cycler
 import os
 import mplhep as hep
+from helpers import legend_labels
     
 from common_binning import JERC_Constants
+from JetEtaBins import JetEtaBins, PtBins
 
 def make_comparison_plot(data_dict,
                               function_dict,
-                              etabins_abs=np.array(JERC_Constants.etaBinsEdges_CaloTowers_full()),
-                              ptbins=np.array(JERC_Constants.ptBinsEdgesMCTruth()),
-                              etaidx=0, flav='',
+                              etabins=JetEtaBins("HCalPart", absolute=True), #np.array(JERC_Constants.etaBinsEdges_CaloTowers_full()),
+                              ptbins=PtBins("MC_truth"), #np.array(JERC_Constants.ptBinsEdgesMCTruth()),
+                              binidx=0, flav='b',
                               ratio_name='ratio',
-                              inverse=True):
+                              inverse=True, plotvspt=True):
     ''' Make a plot of the jet energy response vs pt for the data points in the dictionary `data_dict`
     Copare with with lines obtained from coffea evaluators in `function_dict`.
     `function_dict` can be None than, no lines are shown.
     A ratio plot is drawn vs the first entry in `data_dict`.
     For the legends and figure name the flavor `flav` and eta bin values with the index `etaidx` are used.
-    Eta bins are defined above in this file. 
     '''
    
     keys = [key for key in data_dict.keys()]
-    start = np.searchsorted(ptbins, 20, side='left')
-    end = 27
+    start = ptbins.get_bin_idx(20) if plotvspt else 0 #np.searchsorted(ptbins, 20, side='left')
+    end = ptbins.nbins if plotvspt else etabins.nbins
 
-    yvals = np.array([key[0][start:end,etaidx] for key in data_dict.values()])
+    data_range = tuple([range(start,end),binidx]) if plotvspt else tuple([binidx, range(start,end)])
+    yvals = np.array([key[0][data_range] for key in data_dict.values()])
     # end = np.min([len(yv) for yv in yvals])+start #cut, so that all yvals are the same
-    stds  = np.array([key[1][start:end,etaidx] for key in data_dict.values()])
-    reco_pts  = np.array([key[2][start:end,etaidx] if len(key[2].shape)==2 else key[2][start:end] for key in data_dict.values()])
+    stds  = np.array([key[1][data_range] for key in data_dict.values()])
+    reco_pts  = np.array([key[2][data_range] if len(key[2].shape)==2 else key[2][data_range] for key in data_dict.values()])
 
+#     if not plotvspt:
+#         yvals = yvals.T
+#         stds = stds.T
+#         reco_pts = reco_pts.T
 
     ### Replacing response values to corrections
-    # inverse=False
     use_recopt=inverse
+    if not plotvspt:
+        use_recopt=False
+        
+    bins = etabins if plotvspt else ptbins
 
     # yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
     yvals[(yvals==0) | (np.abs(yvals)==np.inf)] = np.nan
@@ -62,27 +71,42 @@ def make_comparison_plot(data_dict,
     for axis in [ax.xaxis, ax.yaxis, ax2.xaxis, ax2.yaxis]:
         axis.set_minor_locator(mpl.ticker.AutoMinorLocator())
 
-    xvals = reco_pts if use_recopt else np.array([((ptbins[start:-1] + ptbins[start+1:])/2)]*len(yvals))
+    if plotvspt:
+        xvals = reco_pts if use_recopt else np.array([ptbins.centres[start:end]]*len(yvals))
+    else:
+        xvals = np.array([etabins.centres[start:end]]*len(yvals))
     validx = (xvals>0)*(yvals>0)
     # xvals_cont = {name: np.geomspace(np.min(xv[valx]), np.max(xv[valx]), 100)
     #               for xv, valx, name in zip(xvals, validx, function_dict.keys())}
     
-    xvals_cont = np.geomspace(np.min(xvals[validx])-2, np.max(xvals[validx])+100, 100)
+    linspacefun = np.geomspace if plotvspt else np.linspace
+    if np.sum(validx) != 0:
+        xvals_cont = linspacefun(np.min(xvals[validx]), np.max(xvals[validx]), 100)
+    else:
+        xvals_cont = linspacefun(np.min(xvals), np.max(xvals), 100)
                                     # for name in function_dict.keys()}
     ### values for splines can only be in a valid range while for corrections evaluators they can go out of range
     ### so one needs to define two xvals
     validx_all = np.logical_not(np.any(np.logical_not(validx), axis=0))
-    xspline = np.geomspace(np.min(xvals[0,validx_all]),  np.max(xvals[0,validx_all]), 100)
+    if np.sum(validx_all) == 0:
+        validx_all = np.ones(validx_all.shape)==1
+    xspline = linspacefun(np.min(xvals[0,validx_all]),  np.max(xvals[0,validx_all]), 100)
     xlog10_spline = np.log10(xspline)
 
-    wd = np.abs(ptbins[start:-1] - ptbins[start+1:]) #bin_widths
+    if plotvspt:
+        wd = np.abs(ptbins.edges[start+1:end+1] - ptbins.edges[start:end]) #bin_widths
+    else:
+        wd = np.abs(etabins.edges[start+1:end+1] - etabins.edges[start:end]) #bin_widths
 
     if inverse==True:
         yvals = 1/yvals
         ### Error propagation
         stds = yvals**2*stds
 
-    eta_str = r'{:0.2f}$<\eta<${:0.2f}'.format(etabins_abs[etaidx], etabins_abs[etaidx+1])
+    if plotvspt:
+        eta_str = r'{:0.2f}$<|\eta|<${:0.2f}'.format(etabins.edges[binidx], etabins.edges[binidx+1])
+    else:
+        eta_str = 'to be implemented'
     p1 = ax.errorbar(xvals[0], yvals[0], yerr=stds[0], #marker='o',
     #                      markerfacecolor='none', markeredgewidth=1,
                  linestyle="none", label=keys[0]) #+', '+eta_str)
@@ -95,6 +119,7 @@ def make_comparison_plot(data_dict,
     if reset_colors:
         ax.set_prop_cycle(new_cycler)
 
+#     assert False
     yvals_cont = {}
     yvals_spline = {}
     for name in function_dict.keys():
@@ -103,23 +128,33 @@ def make_comparison_plot(data_dict,
         if closure is None or closure==1:
             def closure(a,b):
                 return np.ones_like(a*b)
-        etaval = etabins_abs[etaidx]+0.001 #to ensure that the correction is applied from the right side of the bin border
-        yvals_cont[name] = correction_fnc(np.array([etaval]), xv_cont)/closure(np.array([etaval]), xv_cont)
-        yvals_spline[name] = correction_fnc(np.array([etaval]), xspline)/closure(np.array([etaval]), xspline)
-        corr_etabins = correction_fnc._bins['JetEta']
-        corr_bin_idx = np.searchsorted(corr_etabins, etaval, side='right')-1
-#         assert False
-        if corr_bin_idx==len(corr_etabins):
-            corr_bin_idx-=1
-        if 'Winter' in name:
-            eta_str = ', \n'+r' {:0.2f}$<\eta<${:0.2f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
-        else:
-            eta_str = ''
+        #to ensure that the correction is applied from the right side of the bin border
+        binval = bins.edges[binidx]+0.001
+        vals_cont = (np.array([binval]), xv_cont) if plotvspt else (xv_cont, np.array([binval]))
+        vals_spline = (np.array([binval]), xspline) if plotvspt else (xspline, np.array([binval]))
+        yvals_cont[name] = correction_fnc(*vals_cont)/closure(*vals_cont)
+        yvals_spline[name] = correction_fnc(*vals_spline)/closure(*vals_spline)
+        
+        eta_str = ''
+        if plotvspt:
+            corr_etabins = correction_fnc._bins['JetEta'] 
+            corr_bin_idx = np.searchsorted(corr_etabins, binidx, side='right')-1
+    #         assert False
+            if corr_bin_idx==len(corr_etabins):
+                corr_bin_idx-=1
+            if 'Winter' in name:
+                eta_str = ', \n'+r' {:0.2f}$<|\eta|<${:0.2f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
+            
         ax.plot(xv_cont, yvals_cont[name], label=name+eta_str, markersize=0) # +', '+eta_str, markersize=0)
 
     ############################ Data ratio plot ######################################
-    ax2.hlines(1,1, 10000, linestyles='--',color="black",
-        linewidth=1,)
+    
+    ax2.hlines(1,-10, 10000, linestyles='--',color="black", 
+               linewidth=1,)
+#     else:
+#         ax2.hlines(1,-10, 10, linestyles='--',color="black",
+#             linewidth=1,)
+
     
     data_model_ratio = yvals/yvals[0]
     data_model_ratio_unc = stds / yvals[0]
@@ -156,7 +191,10 @@ def make_comparison_plot(data_dict,
     if reset_colors:
         ax2.set_prop_cycle(new_cycler)
         
-    spline_func = CubicSpline(np.log10(xvals[0][validx[0]]), yvals[0][validx[0]], bc_type='natural')
+    if np.sum(validx) != 0:
+        spline_func = CubicSpline(np.log10(xvals[0][validx[0]]), yvals[0][validx[0]], bc_type='natural')
+    else:
+        spline_func = CubicSpline([1,1], [-5,5], bc_type='natural') if plotvspt else CubicSpline([1,1], [20,100], bc_type='natural')
     y_spline = spline_func(xlog10_spline)
 
     for key in yvals_spline.keys():
@@ -169,7 +207,7 @@ def make_comparison_plot(data_dict,
 
     ######################## Calculate resonable limits excluding the few points with insane errors
     recalculate_limits=True
-    if recalculate_limits:
+    if recalculate_limits and np.sum(validx) != 0:
         yerr_norm = np.concatenate([stds])
         y_norm = np.concatenate([yvals])
         norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)
@@ -191,35 +229,44 @@ def make_comparison_plot(data_dict,
             ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
             print(f"right lim = {right_lim}") 
         
-        
-    xlabel = r'$p_{T,reco}$ (GeV)' if use_recopt else r'$p_{T,ptcl}$ (GeV)'
+    if plotvspt:
+        xlabel = r'$p_{T,reco}$ (GeV)' if use_recopt else r'$p_{T,ptcl}$ (GeV)'
+    else:
+        xlabel = r'$|\eta|$'
     ax2.set_xlabel(xlabel);
     ylabel = r'correction (1/median)' if inverse else r'median response'
     ax.set_ylabel(ylabel);
-    ax.set_xscale('log')
-    ax2.set_xscale('log')
+    if plotvspt:
+        ax.set_xscale('log')
+        ax2.set_xscale('log')
 
     xlims = ax.get_xlim()
     # assert False
-    ax.hlines(1,1, 10000, linestyles='--',color="black",
+    ax.hlines(1,-10, 10000, linestyles='--',color="black",
               linewidth=1,)
 
 #     ax.set_xticks([])
-    ax2.set_xticks([10, 20, 50, 100, 500, 1000, 5000])
+    if plotvspt:
+        ax2.set_xticks([10, 20, 50, 100, 500, 1000, 5000]) 
     ax.set_xticks(ax2.get_xticks())
     ax.set_xticklabels([])
     ax2.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
     leg1 = ax.legend(ncol=1)
 
+    if not plotvspt:
+        xlims = (-0.2, 5.3)
     ax.set_xlim(xlims)
     ax2.set_xlim(xlims)
 
-    eta_string = '_eta'+str(etabins_abs[etaidx])+'to'+str(etabins_abs[etaidx+1])
-    eta_string = eta_string.replace('.','')
+    eta_string = bins.idx2str(binidx) #'_eta'+str(etabins_abs[etaidx])+'to'+str(etabins_abs[etaidx+1])
+#     eta_string = eta_string.replace('.','')
     fig_corr_name = 'corr' if inverse else 'med_resp'
-    run_name =  fig_corr_name+'_vs_pt_L5_'+'-'.join(keys)+'-'.join(function_dict.keys())
-    run_name = run_name.replace(', ', '-').replace(" ", "_").replace("+", "_")
-    dir_name1 = 'fig/corr_vs_pt_comparisons/'
+    fig_x_str = 'pt' if plotvspt else 'eta'
+    run_name =  f'{fig_corr_name}_vs_{fig_x_str}_L5_'+'-'.join(keys)+'-'.join(function_dict.keys())
+    run_name = (run_name.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
+                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '')
+    )
+    dir_name1 = f'fig/{fig_corr_name}_vs_{fig_x_str}_comparisons/'
     dir_name2 = dir_name1+run_name
     if not os.path.exists(dir_name1):
         os.mkdir(dir_name1)
@@ -228,13 +275,13 @@ def make_comparison_plot(data_dict,
         os.mkdir(dir_name2)
         print("Creating directory ", dir_name2)
 
-    hep.label.exp_text(text=f'$ {etabins_abs[etaidx]}<\eta<{etabins_abs[etaidx+1]}$, {flav} jets', loc=0, ax=ax)
-    fig_name = dir_name2+'/'+run_name+"_"+flav+eta_string
+    hep.label.exp_text(text=f'{bins.idx2plot_str(binidx)}, {flav} jets', loc=0, ax=ax)
+    fig_name = dir_name2+'/'+run_name+"_"+flav+'_'+eta_string
     print("Saving plot for eta = ", eta_string)
     print("Saving plot with the name = ", fig_name+".pdf / .png")
-    plt.savefig(fig_name+'.pdf');
-    plt.savefig(fig_name+'.png');
-    plt.show();
+    plt.savefig(fig_name+'.pdf')
+    plt.savefig(fig_name+'.png')
+    plt.show()
 
 
 from helpers import read_data as read_data_orig
@@ -242,7 +289,7 @@ def read_data(mean_name, flav, tag1):
     return read_data_orig(mean_name, flav, tag1, '../')
 
 ### Some recent file to get out the binning
-outname = '../out/CoffeaJERCOutputs_L5_QCD-MG-Py_alphacut_0p2.coffea'
+outname = '../out/CoffeaJERCOutputs_L5_DY-MG-Py.coffea'
 output = util.load(outname)
 ptbins = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].edges
 ptbins_c = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].centers
@@ -430,7 +477,7 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
     eta_string = eta_string.replace('.','')
     print("Saving plot for eta = ", eta_string)
     fig_name = 'fig/corr_vs_pt'+flav+eta_string+'_L5_double_ratio'+'-median'
-    fig_name = fig_name.replace(', ', '-')
+    fig_name = fig_name.replace('$t\overline{\, t}$', 'ttbar').replace(', ', '-').replace('(', '').replace(')', '')
     print("Saving plot with the name = ", fig_name)
     plt.savefig(fig_name+'.pdf');
     plt.savefig(fig_name+'.png');

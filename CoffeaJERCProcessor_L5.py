@@ -40,6 +40,11 @@ import awkward as ak
 # from coffea import some_test_func
 # some_test_func.test_func()
 
+def inv_mass_plus(lepton_pairs):
+    return np.sqrt(np.abs(np.sum(lepton_pairs.E, axis=1)**2 - np.sum(lepton_pairs.px, axis=1)**2
+                    - np.sum(lepton_pairs.py, axis=1)**2 - np.sum(lepton_pairs.pz, axis=1)**2))
+
+mZpdg = 91.1876
 
 manual_bins = [400, 500, 600, 800, 1000, 1500, 2000, 3000, 7000, 10000]
 ptbins = np.array(JERC_Constants.ptBinsEdgesMCTruth())
@@ -152,7 +157,7 @@ class Processor(processor.ProcessorABC):
 
         ########### Redo the flavour tagging if neccesarry. LHE Flavour2 derivation has to be done before the jet cuts  ###########
         #### Some samples have a missing LHE flavour infomration ####
-        if (not 'LHEPart' in events.fields) and ('LHE_flavour' in jetflavour):
+        if (not 'LHEPart' in selectedEvents.fields) and ('LHE_flavour' in jetflavour):
             raise ValueError(f"jet flavour is chosen as {jetflavour}, but the sample does not contain 'LHEPart' "+
                                  ", so the jet flavour cannot be recalculated.")
              
@@ -184,8 +189,16 @@ class Processor(processor.ProcessorABC):
         # print("recojetpt = ", reco_jets.pt)
         # print("genjetpt = ", reco_jets.matched_gen.pt)
 
-        # Require no matched (dressed) leptons in the jet;
-        # Leptons are often misreconstructed as jets and can ruin the comparison between different samples.
+        ###### Event selection based on leptons: 2 (0/1/2) reco leptons for DY (TTBAR semilep) ######
+        # cuts on DY and ttbar based on L3Res selections https://twiki.cern.ch/twiki/bin/view/CMS/L3ResZJet
+        muon = selectedEvents.Muon
+        tight_mu_cut = (muon.tightId) & (muon.pfIsoId>=4) & (np.abs(muon.eta)<2.3) & (muon.pt>20)
+        tightmuons = muon[tight_mu_cut]
+
+        electron = selectedEvents.Electron
+        tight_ele_cut = (electron.cutBased==4) &(np.abs(electron.eta)<2.4) & (electron.pt>25)
+        tightelectrons = electron[tight_ele_cut]
+        
         genpart = selectedEvents.GenPart
         lepton_mask = (
                 ((np.abs(genpart.pdgId) == 11) | (np.abs(genpart.pdgId) == 13) | (np.abs(genpart.pdgId) == 15 ))
@@ -194,21 +207,45 @@ class Processor(processor.ProcessorABC):
         )
         leptons = genpart[lepton_mask]
 
-        drs = reco_jets.metric_table(leptons, return_combinations=False, axis=1 )
+        ### Comparing to number of generated prompt leptons can deal with all the sample cases (2 for DY, 0,1,2 for TTBAR, 0 for QCD)
+        events_with_good_lep = ((ak.num(tightmuons) == ak.num(leptons))
+                        | (ak.num(tightelectrons) == ak.num(leptons) )
+                       )        
+
+        DYcond = np.array([True]*len(selectedEvents))
+
+        if 'DY' in dataset:
+            DYcond = DYcond * (
+                (np.sum(tightelectrons.pt, axis=1)>15) | (np.sum(tightmuons.pt, axis=1)>15)
+            )
+            DYcond = DYcond * (
+                (np.abs(inv_mass_plus(tightelectrons) - mZpdg) < 20)
+                | (np.abs(inv_mass_plus(tightmuons) - mZpdg) < 20)
+            )
+
+        selectedEvents = selectedEvents[events_with_good_lep*DYcond]
+        reco_jets = reco_jets[events_with_good_lep*DYcond]
+        leptons = leptons[events_with_good_lep*DYcond]
+        tightelectrons = tightelectrons[events_with_good_lep*DYcond]
+        tightmuons = tightmuons[events_with_good_lep*DYcond]
+
+        output['cutflow'].fill(cutflow='events passing the lepton selection', weight=len(selectedEvents))
+
+        # Require tight lepton veto id on jets = no matched (dressed) leptons in the jet;
+        # Leptons are also reconstructed as jets with just one (or more) particle, so it is important to remove them
+        reco_jets[(reco_jets.jetId >> 2 & 1)==1] ### tight lepton veto id
+        output['cutflow'].fill(cutflow='jets, tight lepton id', weight=ak.sum(ak.num(reco_jets)))
+
+        ### Additional dR cut on not overlapping with leptons (tight lepton veto id does not seem to cut all the leptons)
+        drs = reco_jets.metric_table(tightelectrons, return_combinations=False, axis=1 )
         matched_with_promt_lep = np.any((drs<0.4),axis=2)
-        # jet_mask = np.logical_not(matched_with_promt_lep)
-        # reco_jets = reco_jets[np.logical_not(matched_with_promt_lep)]
-        # output['cutflow'].fill(cutflow='no_dressed_lep', weight=ak.sum(ak.num(reco_jets)))
+        overlappng_reco_lep_mask = np.logical_not(matched_with_promt_lep)
 
-        tight_jet = (reco_jets.jetId >> 2 & 1)
-        # reco_jets = reco_jets[tight_jet==True]
-
-        # At least one matched (dressed) electron/muon found
-        # dressed_electron_mask = ak.sum(ak.is_none(reco_jets.matched_electrons,axis=2), axis=2)==2
-        # dressed_muon_mask     = ak.sum(ak.is_none(reco_jets.matched_muons,axis=2), axis=2)==2
-        # reco_jets = reco_jets[dressed_electron_mask & dressed_muon_mask]
-        output['cutflow'].fill(cutflow='no_dressed_lep', weight=ak.sum(ak.num(reco_jets)))
-
+        drs = reco_jets.metric_table(tightmuons, return_combinations=False, axis=1 )
+        matched_with_promt_lep = np.any((drs<0.4),axis=2)
+        overlappng_reco_lep_mask = overlappng_reco_lep_mask*np.logical_not(matched_with_promt_lep)
+        reco_jets = reco_jets[overlappng_reco_lep_mask]
+        output['cutflow'].fill(cutflow='jets, dR cut with leptons', weight=ak.sum(ak.num(reco_jets)))
 
         jet_pt_mask = reco_jets.matched_gen.pt>15
         ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
@@ -219,7 +256,8 @@ class Processor(processor.ProcessorABC):
         reco_jets = reco_jets[jet_pt_mask]
         output['cutflow'].fill(cutflow='jetpt>15', weight=ak.sum(ak.num(reco_jets)))
 
-        ######### Alpha cut = cut on the additional jet activity  ############        
+        ######### Alpha cut = cut on the additional jet activity  ############    
+        # Not used since run 2 because the large pileup causes a bias    
         # alphacut = 1.0
         if "QCD" in dataset:
             alphacut = 1.0 #if the alpha cut is different from the default
@@ -259,10 +297,10 @@ class Processor(processor.ProcessorABC):
         # print("recojetpt = ", reco_jets.pt)
         # print("genjetpt = ", reco_jets.matched_gen.pt   )
 
-        # Cut on overlapping jets
-        drs, _ = reco_jets.metric_table(reco_jets, return_combinations=True, axis=1)
-        jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
-        reco_jets = reco_jets[jet_iso_mask]
+        # # Cut on overlapping jets
+        # drs, _ = reco_jets.metric_table(reco_jets, return_combinations=True, axis=1)
+        # jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
+        # reco_jets = reco_jets[jet_iso_mask]
         output['cutflow'].fill(cutflow='iso jets', weight=ak.sum(ak.num(reco_jets)))
         gen_jets = reco_jets.matched_gen
 
@@ -279,7 +317,7 @@ class Processor(processor.ProcessorABC):
         jetpt      = ak.flatten(reco_jets.pt).to_numpy( allow_missing=True)
         jeteta     = ak.flatten(reco_jets.eta).to_numpy( allow_missing=True)
         
-        ptresponse_np = jetpt / gen_jetpt
+        # ptresponse_np = jetpt / gen_jetpt 
         # correction_pos_pt = (len(self.ptbins_closure)
         #                       - np.count_nonzero(np.array(gen_jetpt, ndmin=2).transpose() < self.ptbins_closure, axis=1))
         # correction_pos_eta = (len(self.etabins_closure)
