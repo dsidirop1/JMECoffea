@@ -17,9 +17,9 @@ def make_comparison_plot(data_dict,
                               ptbins=PtBins("MC_truth"), #np.array(JERC_Constants.ptBinsEdgesMCTruth()),
                               binidx=0, flav='b',
                               ratio_name='ratio',
-                              inverse=True, plotvspt=True):
+                              inverse=True, plotvspt=True, ratio_ylim=None):
     ''' Make a plot of the jet energy response vs pt for the data points in the dictionary `data_dict`
-    Copare with with lines obtained from coffea evaluators in `function_dict`.
+    Compare with with lines obtained from coffea evaluators in `function_dict`.
     `function_dict` can be None than, no lines are shown.
     A ratio plot is drawn vs the first entry in `data_dict`.
     For the legends and figure name the flavor `flav` and eta bin values with the index `etaidx` are used.
@@ -108,12 +108,14 @@ def make_comparison_plot(data_dict,
     else:
         eta_str = 'to be implemented'
     p1 = ax.errorbar(xvals[0], yvals[0], yerr=stds[0], #marker='o',
+                     capsize=1.6, capthick=0.7, linewidth=1.0,
     #                      markerfacecolor='none', markeredgewidth=1,
-                 linestyle="none", label=keys[0]) #+', '+eta_str)
+                     linestyle="none", label=keys[0]) #+', '+eta_str)
 
     # markers = ['v','^','d', 'p']
     for xval, yval, name, std in zip(xvals[1:], yvals[1:], keys[1:], stds[1:]):
         ax.errorbar(xval, yval, yerr=std, #marker=marker,
+                    capsize=1.6, capthick=0.7, linewidth=1.0,
                     linestyle="none", label=name)
 
     if reset_colors:
@@ -138,19 +140,32 @@ def make_comparison_plot(data_dict,
         eta_str = ''
         if plotvspt:
             corr_etabins = correction_fnc._bins['JetEta'] 
-            corr_bin_idx = np.searchsorted(corr_etabins, binidx, side='right')-1
+            corr_bin_idx = np.searchsorted(corr_etabins, binval, side='right')-1
     #         assert False
             if corr_bin_idx==len(corr_etabins):
                 corr_bin_idx-=1
             if 'Winter' in name:
-                eta_str = ', \n'+r' {:0.2f}$<|\eta|<${:0.2f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
+                eta_str = ', \n'+r' {:0.1f}$<|\eta|<${:0.1f}'.format(corr_etabins[corr_bin_idx], corr_etabins[corr_bin_idx+1])
             
         ax.plot(xv_cont, yvals_cont[name], label=name+eta_str, markersize=0) # +', '+eta_str, markersize=0)
+
+    if not plotvspt:
+        for HCal_border in JERC_Constants.etaBinsEdges_Win14():
+            ax.vlines(HCal_border,0, 2, linestyles='--',color="gray",
+                linewidth=1,)
+
+    # assert False
 
     ############################ Data ratio plot ######################################
     
     ax2.hlines(1,-10, 10000, linestyles='--',color="black", 
                linewidth=1,)
+    if not plotvspt:
+        for HCal_border in JERC_Constants.etaBinsEdges_Win14():
+            ax2.vlines(HCal_border,0, 2, linestyles='--',color="gray",
+                linewidth=1,)
+
+
 #     else:
 #         ax2.hlines(1,-10, 10, linestyles='--',color="black",
 #             linewidth=1,)
@@ -184,6 +199,7 @@ def make_comparison_plot(data_dict,
             val, #[nonzero_model_yield],
             yerr=std, #[nonzero_model_yield],
             linestyle="none",
+            capsize=1.6, capthick=0.7, linewidth=1.0,
             #fmt=marker,
         )
 
@@ -205,30 +221,36 @@ def make_comparison_plot(data_dict,
     ax2.tick_params(direction="in", top=True, right=True, which="both")
     fig.set_tight_layout(True)
 
-    ######################## Calculate resonable limits excluding the few points with insane errors
-    recalculate_limits=True
-    if recalculate_limits and np.sum(validx) != 0:
+    ######################## Calculate resonable limits excluding the few points with insane errors ############################
+    if np.sum(validx) != 0:
+        ### Recalculate the limits for the top ax
         yerr_norm = np.concatenate([stds])
         y_norm = np.concatenate([yvals])
         norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         left_lim = np.min((y_norm-yerr_norm)[norm_pos])
         right_lim = np.max((yerr_norm+y_norm)[norm_pos])
         lim_pad = (right_lim - left_lim)/1.5
-        ax.set_ylim(left_lim, right_lim+lim_pad)
+        ax.set_ylim(left_lim-lim_pad/10, right_lim+lim_pad)
 
+        ### Recalculate the limits for the ratio plot
         yerr_norm = np.concatenate(data_model_ratio_unc)
         y_norm = np.concatenate(data_model_ratio)
-        norm_pos = (yerr_norm<0.008) &  (yerr_norm != np.inf) & (y_norm>-0.1)
+        norm_pos = (yerr_norm<0.4) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         if ~np.any(norm_pos):
             print("Cannot determine ylimits")
-            norm_pos = np.ones(len(yerr_norm), dtype=int)
+            # norm_pos = np.ones(len(yerr_norm), dtype=int)
+        else:
             # raise Exception("Cannot determine ylimits")
             left_lim = np.min((y_norm-yerr_norm)[norm_pos])
             right_lim = np.max((yerr_norm+y_norm)[norm_pos])
             lim_pad = (right_lim - left_lim)/5
             ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
-            print(f"right lim = {right_lim}") 
-        
+            # print(f"normal pos = {norm_pos}")
+            # print(f"right lim = {right_lim}")
+
+    if not ratio_ylim==None:
+        ax2.set_ylim(ratio_ylim)
+
     if plotvspt:
         xlabel = r'$p_{T,reco}$ (GeV)' if use_recopt else r'$p_{T,ptcl}$ (GeV)'
     else:
@@ -251,7 +273,7 @@ def make_comparison_plot(data_dict,
     ax.set_xticks(ax2.get_xticks())
     ax.set_xticklabels([])
     ax2.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    leg1 = ax.legend(ncol=1)
+    leg1 = ax.legend(loc="upper right", ncol=1)
 
     if not plotvspt:
         xlims = (-0.2, 5.3)
@@ -264,7 +286,7 @@ def make_comparison_plot(data_dict,
     fig_x_str = 'pt' if plotvspt else 'eta'
     run_name =  f'{fig_corr_name}_vs_{fig_x_str}_L5_'+'-'.join(keys)+'-'.join(function_dict.keys())
     run_name = (run_name.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
-                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '')
+                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '').replace('\n', '')
     )
     dir_name1 = f'fig/{fig_corr_name}_vs_{fig_x_str}_comparisons/'
     dir_name2 = dir_name1+run_name
@@ -275,7 +297,8 @@ def make_comparison_plot(data_dict,
         os.mkdir(dir_name2)
         print("Creating directory ", dir_name2)
 
-    hep.label.exp_text(text=f'{bins.idx2plot_str(binidx)}, {flav} jets', loc=0, ax=ax)
+    hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    hep.label.exp_text(text=f'{bins.idx2plot_str(binidx)}\n{flav} jets', loc=2, ax=ax)
     fig_name = dir_name2+'/'+run_name+"_"+flav+'_'+eta_string
     print("Saving plot for eta = ", eta_string)
     print("Saving plot with the name = ", fig_name+".pdf / .png")
@@ -414,6 +437,7 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
         xvals,
         data_model_ratio, #[nonzero_model_yield],
         yerr=data_model_ratio_unc, #[nonzero_model_yield],
+        capsize=1.6, capthick=0.7, linewidth=1.0,
         fmt='o',
         label = 'Pythia',
     )
@@ -426,6 +450,7 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
         xvals,
         data_model_ratio2, #[nonzero_model_yield],
         yerr=data_model_ratio_unc2, #[nonzero_model_yield],
+        capsize=1.6, capthick=0.7, linewidth=1.0,
         fmt='^',
         label = 'Herwig',
     #     colour='blue'

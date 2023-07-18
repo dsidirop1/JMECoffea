@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 
+from pathlib import Path
+from scipy.optimize import curve_fit
+
 def rebin_hist(h, axis_name, edges):
     '''Stolen from Kenneth Long
     https://gist.github.com/kdlong/d697ee691c696724fc656186c25f8814
@@ -117,14 +120,54 @@ def hist_div(hist1, hist2):
     check_hist_values(hist1, hist2)
     return {key:(hist1[key]/hist2[key]) for key in hist1.keys()}
 
-def sum_subhist(output, histo_key, scales):
-    ''' Merge the datasets in dictionary `output` for `histo_key` and scale each dataset with `scales`
+def sum_subhist(histo, histo_key, scales):
+    ''' Merge (stitch) the datasets in the dictionary `histo` for `histo_key` and weighting each dataset by the scale factor defined in `scales`.
+    `histo`: a dictionary of dictionaries (corresponding to each dataset) of the histograms (correspinding to each histogram).
+    `histo_key`: merge the datasets for the given histogram in histo
+    `scales`: a dictionary of the scale factors for each dataset.
+    returns: a histogram for `histo_key` which all the datasets merged
     '''
     new_hist = 0    
     for sample_key in scales.keys():
-        new_hist += output[sample_key][histo_key]*scales[sample_key]
+        new_hist += histo[sample_key][histo_key]*scales[sample_key]
     return new_hist
 
+# def scale_subhist(histo, histo_key, scales):
+#     ''' Scale the datasets in the dictionary `histo` for `histo_key` and scale each dataset with `scales`
+#     '''
+#     new_hist = {sample_key:{} for sample_key in scales.keys()}    
+#     for sample_key in scales.keys():
+#         new_hist[sample_key][histo_key] = histo[sample_key][histo_key]*scales[sample_key]
+#     return new_hist
+
+import hist
+def slice_histogram(response_hist, recopt_hist, etabins, etaidx, pt_lo, pt_hi):
+    '''To do: 
+    - make a switch from either combining eta>0 and eta<0 bins or not. So far, combing them. 
+    '''
+    jeteta_length = (len(etabins)-1)//2
+    etaPl_lo = etabins[etaidx+jeteta_length]
+    etaPl_hi = etabins[etaidx+1+jeteta_length]
+    etaMi_lo = etabins[jeteta_length-etaidx-1]
+    etaMi_hi = etabins[jeteta_length-etaidx]
+    eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
+    eta_string = eta_string.replace('.','')
+
+        
+    sliceMi = {'jeteta': slice(hist.loc(etaMi_lo),hist.loc(etaMi_hi),sum),
+                'pt_gen': slice(hist.loc(pt_lo),hist.loc(pt_hi),sum)}
+    slicePl = {'jeteta': slice(hist.loc(etaPl_lo),hist.loc(etaPl_hi),sum),
+                'pt_gen': slice(hist.loc(pt_lo),hist.loc(pt_hi),sum)}
+
+    histoMi = response_hist[sliceMi]
+    histoPl = response_hist[slicePl]
+    histo = (histoMi+histoPl)
+    
+    histoptMi = recopt_hist[sliceMi]
+    histoptPl = recopt_hist[slicePl]
+    histopt = (histoptMi+histoptPl)
+
+    return histo, histopt, eta_string
 
 def save_data(data, name, flavor, tag, ptbins_centres, etabins, path='out_txt'):
     data_dict = {str(ptBin):data[i] for i, ptBin in enumerate(ptbins_centres)}
@@ -170,20 +213,23 @@ def find_ttbar_xsec(key):
     return xsec
 
 
-def get_median(xvals, yvals, bin_edges, Neff):
+def get_median(histo, Neff):
     ''' Calculate median and median error (assuming Gaussian distribution).
     This is the binned median, not the real data median
     Extrapolation withing bins is performed.
     '''
+    xvals = histo.axes[0].centers
+    bin_edges = histo.axes[0].edges
+    yvals = histo.values()
     yvals_cumsum = np.cumsum(yvals)
     N = np.sum(yvals)
 
     # once adding weights, Neff appears to be ~1/4 - 1/3 of N when not using weights,
     # so changing limits to match the both cases
-    if np.abs(np.sum(yvals)-Neff)/Neff<1e-5:
-        N_min_limit=200
-    else:
-        N_min_limit=50
+    # if np.abs(np.sum(yvals)-Neff)/Neff<1e-5:
+    #     N_min_limit=200
+    # else:
+    N_min_limit=50
 
     if Neff>N_min_limit:
         med_bin = np.nonzero(yvals_cumsum>N/2)[0][0]
@@ -198,58 +244,71 @@ def get_median(xvals, yvals, bin_edges, Neff):
     
     return median, medianstd
 
-from scipy.optimize import curve_fit
-def fit_response(xvals, yvals, Neff):
-    ''' fit response distribution with two consecutive gaussians
+def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
+    ''' fit response distribution with `Nfit` consecutive gaussian fits
+    Perform the second and further fits around the mean+/-<sigma_fit_window>*std of the previous fit.
+
     '''
-    if_failed = False
+    if_failed = False   #save if the fit failed or converged
+    
+    xvals = histo.axes[0].centers
+    yvals = histo.values()
+    variances = histo.variances()
     
     # once adding weights, Neff appears to be ~1/4 - 1/3 of N when not using weights,
     # so changing limits to match the both cases
-    if (np.sum(yvals)-Neff)/Neff<1e-5:
-        N_min_limit=50
-    else:
-        N_min_limit=15
+    # if (np.sum(yvals)-Neff)/Neff<1e-5:
+    #     N_min_limit=50
+    # else:
+    N_min_limit=50
     
     nonzero_bins = np.sum(yvals>0)
     if nonzero_bins<2 or Neff<N_min_limit:
-        p2=[0,0,0]
+        p=[0,0,0]
         chi2 = np.nan
         cov = np.array([[np.nan]*3]*3)
         Ndof = 0
+        if_failed = True
+        xfit_l, xfit_h = [0, len(xvals)-1]
     else:
         try:
             p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
-                 ######## Second Gaussian ########
-            xfit_l = np.where(xvals>=p[1]-np.abs(p[2])*1.5)[0][0]
-            xfit_hs = np.where(xvals>=p[1]+np.abs(p[2])*1.5)[0]
-            xfit_h = xfit_hs[0] if len(xfit_hs)>0 else len(xvals)
-
-            if len(range(xfit_l,xfit_h))<6: #if there are only 3pnts, the uncertainty is infty
-                xfit_l = xfit_l-1
-                xfit_h = xfit_h+1
-                if len(range(xfit_l,xfit_h))<6:
+#             print("p vals 0 = ", p)
+            ######## Second Gaussian ########
+            for i in range(Nfit-1):
+                xfit_l, xfit_h = np.searchsorted(xvals,
+                                                 [p[1]-np.abs(p[2])*sigma_fit_window,
+                                                  p[1]+np.abs(p[2])*sigma_fit_window])
+                
+                # if there are only 3pnts, the uncertainty is infty
+                # (or if too small, then the fit doesn't become good),
+                # so increase the range
+                rangeidx = 0
+                while len(range(xfit_l,xfit_h))<6 and rangeidx<3:
                     xfit_l = xfit_l-1
                     xfit_h = xfit_h+1
-            if xfit_l<0:
-                xfit_h-=xfit_l
-                xfit_l = 0
-            xvals2 = xvals[xfit_l: xfit_h]
-            yvals2 = yvals[xfit_l: xfit_h]
-            p2, cov = curve_fit(gauss, xvals2, yvals2, p0=p)
-                         ######## End second Gaussian ########
+                    rangeidx+=1
+                if xfit_l<0:
+                    xfit_h-=xfit_l
+                    xfit_l = 0
+                xvals2 = xvals[xfit_l:xfit_h]
+                yvals2 = yvals[xfit_l:xfit_h]
+                p, cov = curve_fit(gauss, xvals2, yvals2, p0=p)
+#                 print(f"p vals {i+1} = ", p)
+                 ######## End second Gaussian ########
 
-            ygaus = gauss(xvals, *p2)
-            chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
+            ygaus = gauss(xvals, *p)
+            chi2 = sum(((yvals-ygaus)**2/(variances+1E-20))[xfit_l:xfit_h] )
             Ndof = len(xvals2)-3
         except(RuntimeError):   #When fit failed
-            p2=[0,0,0]
+            p=[0,0,0]
             chi2 = np.nan
             cov = np.array([[np.nan]*3]*3)
             Ndof = 0
             if_failed = True
+            xfit_l, xfit_h = [0, len(xvals)-1]
             
-    return [p2, cov, chi2, Ndof, if_failed]
+    return [p, cov, chi2, Ndof, if_failed, [xfit_l, xfit_h]]
 
 
 barable_samples = ['b', 'c', 's', 'u', 'd']
@@ -295,35 +354,28 @@ def gauss(x, *p):
     A, mu, sigma = p
     return A*np.exp(-(x-mu)**2/(2.*sigma**2))
 
-import hist
-def slice_histogram(response_hist, recopt_hist, etabins, etaidx, pt_lo, pt_hi):
-    '''To do: 
-    - make a switch from either combining eta>0 and eta<0 bins or not. So far, combing them. 
-    '''
-    jeteta_length = (len(etabins)-1)//2
-    etaPl_lo = etabins[etaidx+jeteta_length]
-    etaPl_hi = etabins[etaidx+1+jeteta_length]
-    etaMi_lo = etabins[jeteta_length-etaidx-1]
-    etaMi_hi = etabins[jeteta_length-etaidx]
-    eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
-    eta_string = eta_string.replace('.','')
-
-        
-    sliceMi = {'jeteta': slice(hist.loc(etaMi_lo),hist.loc(etaMi_hi),sum),
-                'pt_gen': slice(hist.loc(pt_lo),hist.loc(pt_hi),sum)}
-    slicePl = {'jeteta': slice(hist.loc(etaPl_lo),hist.loc(etaPl_hi),sum),
-                'pt_gen': slice(hist.loc(pt_lo),hist.loc(pt_hi),sum)}
-
-    histoMi = response_hist[sliceMi]
-    histoPl = response_hist[slicePl]
-    histo = (histoMi+histoPl)
+def get_xsecs_filelist_from_file(file_path, data_tag, test_run=False):
+    with open(file_path) as f:
+        lines = f.readlines()
+    lines_split = [line.split() for line in lines]
+    if test_run:
+        lines_split = lines_split[:3]  
+    xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
+    file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
+    return xsec_dict, file_dict
     
-    histoptMi = recopt_hist[sliceMi]
-    histoptPl = recopt_hist[slicePl]
-    histopt = (histoptMi+histoptPl)
 
-    return histo, histopt, eta_string
-
-legend_labels = {"ttbar": {"lab":"$t\overline{\, t\!}$",
-                            "short": "ttbar"},
-                            }
+def find_result_file_index(ResultFile):
+    ResultFileName = Path.cwd() / ResultFile
+    if ResultFileName.exists():
+        Lines = ResultFileName.read_text().split('\n')
+        for ii in range(len(Lines)):
+            if 'Run_index_' == Lines[-ii-1][:10]:
+                RunIndex = int(Lines[-ii-1][10:]) + 1
+                break
+            if ii==len(Lines):
+                print("Couldn't read the index number from"+ResultFile)
+    else:
+        RunIndex = 1
+        
+    return RunIndex

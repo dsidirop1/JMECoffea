@@ -41,6 +41,8 @@ def main():
     # ### My favorite notebook settings
     
     # ### Imports
+    # 
+    # #### Import updated coffea and awkward versions
     
     import sys
     coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
@@ -67,7 +69,8 @@ def main():
     import hist
     
     from plotters.pltStyle import pltStyle
-    pltStyle(style='hep')
+    # pltStyle(style='hep')
+    
     # pltStyle(style='paper')
     plt.rcParams['figure.dpi'] = 150
     import os
@@ -75,18 +78,19 @@ def main():
     ### import subpackages
     from helpers import hist_add, hist_mult, hist_div, dictionary_pattern, sum_subhist, xsecstr2float
     from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors, fit_response
-    from plotters.plotters import plot_response_dist, plot_corrections, plot_corrections_eta
+    from plotters.plotters import plot_response_dist, plot_corrections, plot_corrections_eta, plot_response_dist_stack
     
     from helpers import rebin_hist, mirror_eta_to_plus, sum_neg_pos_eta, find_ttbar_xsec
     from common_binning import JERC_Constants
+    pltStyle(style='hep')
     # %matplotlib notebook 
     
     # ### Parameters of the run and switches
     
-    UsingDaskExecutor = True   ### True if use dask local executor, otherwise use futures
+    UsingDaskExecutor = False   ### True if use dask local executor, otherwise use futures
     CERNCondorCluster = False   ### True if run on the CERN condor cluster using dask. Requires `UsingDaskExecutor` = True
     CoffeaCasaEnv     = False   ### True if run on coffea case. Never tested since ages.
-    load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
+    load_preexisting  = True    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False   ### True if run only on one file and five chuncs to debug processor
     load_fit_res      = False   ### True if only replot the fit results
     
@@ -94,11 +98,8 @@ def main():
     ### HCalPart: bin in HCal sectors, CaloTowers: the standard JERC binning,
     ### CoarseCalo: like 'CaloTowers' but many bins united; onebin: combine all eta bins
     ### Preprocessing always done in CaloTowers
-    eta_binning  = "JERC"  ### HCalPart, CoarseCalo, JERC, CaloTowers, onebin;
+    eta_binning  = "HCalPart"  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
     sum_neg_pos_eta_bool=True  ### if combining the positive and negative eta bins
-    
-    fine_etabins      = True   
-    one_bin           = False   ### Unite all eta and pt bins in one
     
     Nfiles = -1                 ### -1 for all files
     
@@ -108,50 +109,71 @@ def main():
     ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'Pythia-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
+    data_tag = 'QCD-Py' # 'QCD-MG-Her' #'Herwig-TTBAR' 
     # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '' #_Aut18binning   
+    add_tag = '' #'_3rd_jet' # _cutpromtreco _Aut18binning   
+    run_comment = ''                          #### Comment for the log file: e.g., why the run is made?
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
     
     # fileslist = ['root://xrootd-cms.infn.it/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2510000/056516']
     
-    tag_full = tag_Lx+'_'+data_tag+add_tag
+    processor_config = {
+        # cut: {cut_parameters}
+        "good_lepton_cut":      {"apply":True},
+        "tight_lepton_veto_id": {"apply":True},
+        "recolep_drcut": {"apply":True},
+        "jet_pt_cut": {
+            "apply":True,
+            "mingenjetpt": 15,
+        },
+        "leading_jet_and_alpha_cut":{
+            "apply":True,
+            "alphaQCD": 1.0,
+            "alphaDY":  1.0,
+            "NjetsQCD": 3,
+            "NjetsDY":  2,
+        },
+        "select_Nth_jet":{
+            "apply":True,
+            "N": 2,
+        },
+        "jet_iso_cut":{"apply":False},
+        ### Choose the jet flavour. Some samples have missing `partonFlavour`, so one has to redo the flavour matching oneself. Two different option were implemented:
+        ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
+        ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
+        "jetflavour":'partonFlavour'
+        # ... Add more cuts and parameters as needed
+    }
     
     # ### Dataset parameters
     
+    from fileNames.available_datasets import dataset_dictionary
+    
     dataset = None
-    dataset='fileNames/TTToSemi20UL18_JMENano.txt'
     fileslist = None
     
-    dataset_dictionary = {
-        "Pythia-TTBAR": 'fileNames/TTToSemi20UL18_JMENano.txt',
-        "Herwig-TTBAR": 'fileNames/TT20UL18_JMENano_Herwig.txt',
-        "DY-MG-Py":     'fileNames/DYJets_MG-Py.txt',
-        "DY-MG-Her":    'fileNames/DYJets_MG-Her.txt',
-        "QCD-MG-Py":    'fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt',
-        "QCD-MG-Her":   'fileNames/QCD_Herwig_20UL18/xsecs_QCD_Herwig_corrected.txt',
-        "QCD-Py":       'fileNames/QCD20UL18_JMENano.txt',
-        "DY-FxFx":      'fileNames/DYJets.txt',
-    }
-    
-    if 'QCD' in 'data_tag':
-        print('Alpha cut of $\alpha<0.2$ will be used and a cut on three leading jets')
-    else:
-        print('No alpha cut and cut on the leading jets will be used')
-        
-    
+    printout = ''  ### to be used in the saved output to .txt
+    tag_full = tag_Lx+'_'+data_tag+add_tag
     if not (fileslist is None):
-        print(f'A specific fileslist specified. The calculation will be run on the files {fileslist}')
+        xsec = 1
+        legend_label = data_tag
+        printout += f'A specific fileslist specified. The calculation will be run on the files {fileslist}. The histograms will be saved with the provided tag {data_tag} \n'
     elif data_tag in dataset_dictionary.keys():
-        dataset = dataset_dictionary[data_tag]
-        print(f'The data tag "{data_tag}" found in the dataset_dictionary. The dataset "{dataset}" will be used.')
+        dataset, xsec, legend_label = dataset_dictionary[data_tag]
+        if dataset is None:
+            printout += (f'The data tag "{data_tag}" found in the dataset_dictionary. The dataset with the path to cross-sections {xsec} will be used. \n')
+        else:
+            printout += f'The data tag "{data_tag}" found in the dataset_dictionary. The dataset with the path to file names "{dataset}" will be used. \n'
     elif not(dataset is None):
-        print(f'Using the provided dataset "{dataset}" and the data tag "{data_tag}".')
+        xsec = 1
+        legend_label = data_tag
+        printout += (f'Using the provided dataset with the path to file names {dataset[0]} and the provided data tag "{data_tag}". \n')
     else:
         raise ValueError(f'The data tag "{data_tag}" not found in the dataset_dictionary and no dataset provided.')
         
+    print(printout)
     
     ### Choose the correct redirector
     ## assume running on the LPC
@@ -179,9 +201,6 @@ def main():
     
     if eta_binning != "HCalPart":
         tag_fit_res=tag_full+'_'+eta_binning
-    
-    # if one_bin:
-    #     tag_fit_res=tag_fit_res+'_oneBin'
         
     if load_preexisting == True:
         UsingDaskExecutor = False
@@ -204,11 +223,17 @@ def main():
     if not os.path.exists(out_txt_path):
         os.mkdir(out_txt_path)
         
-    maxchunks = 100 if test_run else None
+    maxchunks = 5 if test_run else None
     if test_run:
         Nfiles = 1
     
-    print(f'Running on the number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}')
+    printout_tmp = f'Running on the number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}'
+    print(printout_tmp)
+    printout += printout_tmp
+    
+    # ### For the attempt to correctly combine three ttbar channels. Not fully tested
+    
+    from helpers import get_xsecs_filelist_from_file
     
     def txt2filesls(dataset_name):
         with open(dataset_name) as f:
@@ -216,41 +241,23 @@ def main():
             fileslist = [xrootdstr + file for file in rootfiles]
         return fileslist
     
-    # ### For the attempt to correctly combine three ttbar channels. Not fully tested
-    
-    combineTTbar = False
-    ttbar_tags = ['Semi', 'Dilep', 'Had']
-    
-    filesets = {}
-    if not (fileslist is None):
-        xsec_dict = {data_tag: 1}
-        filesets = {data_tag: {"files": fileslist, "metadata": {"xsec": 1}}}
-    elif combineTTbar:
-        for ftag in ttbar_tags:
-            data_name = f'fileNames/fileNames_TTTo{ftag}20UL18_JMENano.txt'
-            fileslist = txt2filesls(data_name)[:Nfiles]
-            xsec = find_ttbar_xsec(data_name)
-            filesets[ftag] = {"files": fileslist, "metadata": {"xsec": xsec}}
-    elif "QCD-MG" in data_tag:
-        ### if dataset striched together from a set of datasets where the cross-section for each is given in `dataset`
-        dataset_path = '/'.join(dataset.split('/')[:-1])
-        with open(dataset) as f:
-            lines = f.readlines()
-        lines_split = [line.split() for line in lines]
-        if test_run:
-            lines_split = lines_split[:3]  
-        xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
-        file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
+    if fileslist is not None:
+        xsec_dict = {data_tag: xsec}
+        filesets = {data_tag: {"files": fileslist, "metadata": {"xsec": xsec}}}
+    elif (dataset is None) and (xsec is not None):
+        ### if dataset striched together from a set of datasets where the cross-section for each is given in `xsec`
+        xsec_dict, file_dict = get_xsecs_filelist_from_file(xsec, data_tag, test_run)
+        path_to_xsec = '/'.join(xsec.split('/')[:-1])
+        filesets = {}
         for key in file_dict.keys():
             data_name = file_dict[key]
-            fileslist = txt2filesls(dataset_path+'/'+data_name)[:Nfiles]
+            fileslist = txt2filesls(path_to_xsec+'/'+data_name)[:Nfiles]
             filesets[key] = {"files": fileslist, "metadata": {"xsec": xsec_dict[key]}}
-        
     else:
         fileslist = txt2filesls(dataset)[:Nfiles]
         #### If manyally adding fileslist
-        xsec_dict = {data_tag: 1}
-        filesets = {data_tag: {"files": fileslist, "metadata": {"xsec": 1}}}
+        xsec_dict = {data_tag: xsec}
+        filesets = {data_tag: {"files": fileslist, "metadata": {"xsec": xsec}}}
     
     if not load_preexisting:
         import uproot
@@ -307,10 +314,13 @@ def main():
         client.upload_file('GetAlphaDristributionProcessor.py')
         client.upload_file('LHE_flavour.py')
         client.upload_file('common_binning.py')
+        client.upload_file('JERCProcessorcuts.py')
     
         client
     
     # ### Run the processor
+    
+    # outname = 'out/no_?lep_cuts/CoffeaJERCOutputs_L5_QCD-Py.coffea'
     
     tstart = time.time()
     
@@ -326,7 +336,7 @@ def main():
             chosen_exec = 'futures'
             output = processor.run_uproot_job(filesets,
                                               treename='Events',
-                                              processor_instance=Processor(),
+                                              processor_instance=Processor(processor_config),
                                               executor=processor.iterative_executor,
         #                                        executor=processor.futures_executor,
                                               executor_args={
@@ -339,7 +349,7 @@ def main():
             chosen_exec = 'dask'
             output = processor.run_uproot_job(filesets,
                                               treename='Events',
-                                              processor_instance=Processor(),
+                                              processor_instance=Processor(processor_config),
                                               executor=processor.dask_executor,
                                               executor_args={
                                                   'client': client,
@@ -369,116 +379,93 @@ def main():
         if CERNCondorCluster or CoffeaCasaEnv:
             cluster.close()
     
+    # output_QCD_Py = util.load("out/CoffeaJERCOutputs_L5_QCD-Py.coffea")
+    # output_QCD_Py_3leadingjets_noiso = util.load("out/CoffeaJERCOutputs_L5_QCD-Py_3leadingjets_noiso.coffea")
+    # output_QCD_Py_2leadingjets_iso = util.load("out/CoffeaJERCOutputs_L5_QCD-Py2leadingjets.coffea")
+    # # output_QCD_Py_new = util.load("out/CoffeaJERCOutputs_L5_QCD-Py.coffea")
+    # output_Pythia_TTBAR = util.load("out/CoffeaJERCOutputs_L5_Pythia-TTBAR.coffea")
+    # output_Pythia_TTBAR_iso_cut = util.load("out/CoffeaJERCOutputs_L5_Pythia-TTBAR_iso_cut.coffea")
+    # # output_Pythia_TTBAR_new = util.load("out/CoffeaJERCOutputs_L5_Pythia-TTBAR.coffea")
+    # output_DY_MG_Py_allrecolep = util.load("out/CoffeaJERCOutputs_L5_DY-MG-Py_nolepsel_cutallrecolep.coffea")
+    # output_Pythia_TTBAR_allrecolep = util.load("out/CoffeaJERCOutputs_L5_Pythia-TTBAR_nolepsel_cutallrecolep.coffea")
+    # # output_Pythia_TTBAR_allrecolep = util.load("out/CoffeaJERCOutputs_L5_Pythia-TTBAR_nolepsel_cutallrecolep.coffea")
+    # # output_Pythia_TTBAR_wronglep = util.load("out/CoffeaJERCOutputs_L5_Pythia-TTBAR_nolepsel_wronglepcut.coffea")
+    
+    # output_Pythia_TTBAR['Pythia-TTBAR']['cutflow'][[ 'all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt>15', 'alpha cut; leading jets', 'iso jets']]
+    # output_Pythia_TTBAR_iso_cut['Pythia-TTBAR']['cutflow'][[ 'all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt cut', 'alpha cut; leading jets', 'iso jets']]
+    
+    # output_QCD_Py_3leadingjets_noiso['QCD-Py']['cutflow']
+    
+    # output_QCD_Py_3leadingjets_noiso['QCD-Py']['cutflow'][['all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt cut', 'alpha cut; leading jets', 'iso jets' ]].values()
+    # output_QCD_Py_2leadingjets_iso['QCD-Py']['cutflow'][['all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt>15', 'alpha cut; leading jets', 'iso jets' ]].values()
+    
+    # output_QCD_Py_new['QCD-Py']['cutflow'][['all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt>15', 'alpha cut; leading jets', 'iso jets' ]].values()
+    
+    # output_QCD_Py_new['QCD-Py']['cutflow'][['all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt>15', 'alpha cut; leading jets', 'iso jets' ]] #.plot1d()
+    # output_QCD_Py['dataset1']['cutflow']
+    # output_Pythia_TTBAR_new['Pythia-TTBAR']['cutflow'][['all_jets', 'gen_matched', 'jets, tight lepton id', 'jets, dR cut with leptons', 'jetpt>15', 'alpha cut; leading jets', 'iso jets' ]]
+    # output_Pythia_TTBAR['dataset1']['cutflow']
+    # output_QCD_Py_wronglep['QCD-Py']['cutflow']
+    # output_Pythia_TTBAR_wronglep['Pythia-TTBAR']['cutflow']
+    
     # ### Striching up the sample
     
-    output_orig = output
-    if "QCD-MG" in data_tag:
-        response_sums = {key:sum(dictionary_pattern(output[key], "ptresponse_").values()).sum().value for key in output.keys()}
-        scale_factors = hist_div(xsec_dict, response_sums)
-        all_histo_keys = output[next(iter(output.keys()))].keys()
-        result = {histo_key:sum_subhist(output, histo_key, scale_factors) for histo_key in all_histo_keys }
-        output = result
-    elif len(output.keys())==1:
-        output = output[list(output.keys())[0]]
+    # output_orig = output
+    # if len(xsec_dict)>1:
+    #     keys = ['QCD-MG-Py_HT50to100', 'QCD-MG-Py_HT100to200', 'QCD-MG-Py_HT200to300', 'QCD-MG-Py_HT300to500',
+    #             'QCD-MG-Py_HT500to700', 'QCD-MG-Py_HT700to1000', 'QCD-MG-Py_HT1000to1500', 'QCD-MG-Py_HT1500to2000', 'QCD-MG-Py_HT2000toInf']
+    #     keys = ['QCD-MG-Her_HT50to100', 'QCD-MG-Her_HT100to200', 'QCD-MG-Her_HT200to300', 'QCD-MG-Her_HT300to500',
+    #             'QCD-MG-Her_HT500to700', 'QCD-MG-Her_HT700to1000', 'QCD-MG-Her_HT1000to1500', 'QCD-MG-Her_HT1500to2000', 'QCD-MG-Her_HT2000toInf']
+    
+    keys = output.keys()
+    Nev = {key: output[key]['cutflow']['all_events'].value for key in keys}
+    # response_sums = {key:sum(dictionary_pattern(output[key], "ptresponse_").values()).sum().value for key in output.keys()}
+    # scale_factors = {key:1 for key in output.keys()} #hist_div(xsec_dict, Nev)
+    scale_factors = hist_div(xsec_dict, Nev)
+    #     scale_factors['QCD-MG-Py_HT50to100'] = 0
+    all_histo_keys = output[next(iter(output.keys()))].keys()
+    hists_merged = {histo_key:sum_subhist(output, histo_key, scale_factors) for histo_key in all_histo_keys }
+    # # output = result
+    # elif len(output.keys())==1:
+    output = output[list(output.keys())[0]]
     
     # ### Fit responses
     
     # Define some global variables for the fit
     
-    # ptbins = output[response_key].axes["pt_gen"].edges 
-    # ptbins_c = output[response_key].axes['pt_gen'].centers
-    
-    ## find the first response histogram to extract the axes
-    # for key in output.keys():
-    #     if 'response' in key:
-    #         response_key = key
-    #         break
-    
-    # tag_full += '_fineeta' if fine_etabins==True else ''
     from JetEtaBins import JetEtaBins, PtBins
-    
-    # ptbins = output[response_key].axes["pt_gen"].edges 
-    # ptbins_c = output[response_key].axes['pt_gen'].centers
-    # etabins = output[response_key].axes["jeteta"].edges
     
     jeteta_bins = JetEtaBins(eta_binning)
     pt_bins = PtBins("MC_truth")
     fiteta_bins = JetEtaBins(eta_binning, absolute=True) if sum_neg_pos_eta_bool else jeteta_bins
-    # if one_bin==True:
-    #     ptbins = np.array([ptbins[0], ptbins[-1]])
-    #     ptbins_c = (ptbins[:-1]+ptbins[1:])/2
-    #     etabins = np.array([etabins[0], 0, etabins[-1]])
-    # elif not fine_etabins:
-    #     etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
-    #     etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
-        
-    # jetpt_length = len(ptbins)-1
-    # jeteta_length = (len(etabins)-1)//2
-    
-    # etabins_abs = etabins[(len(etabins)-1)//2:]
-    # etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
-    # etabins_c[0]=0 ## to make eta axis look better in plots.
-    
-    # ptresp_edd = output[response_key].axes['ptresponse'].edges
-    # plot_pt_edges = ptresp_edd[0:np.nonzero(ptresp_edd>=2.0)[0][0]]
-    
-    # #### Testing adding ttbar hists
-    # ##### To do: replace to the system done with `sum_subhist`
-    
-    # combineTTbar = False
-    if combineTTbar:
-        ids = output[list(output.keys())[0]].axis('dataset').identifiers()
-        names = [idii.name for idii in ids  ]
-    
-        output_comb = {}
-    
-        N = {}
-        for s in names:
-            N[s] = output['cutflow'][s+': all events']
-        N_av = sum(N.values())/3
-    
-        for key in output.keys():
-            if key!='cutflow':
-                hist_comb = output[key].integrate('dataset', ids[0])
-                hist_comb.scale(find_ttbar_xsec(names[0])*N[names[0]]/N_av)
-                for ii in range(1,len(ids)-1):
-                    hist2 = output[key].integrate('dataset', ids[ii])
-                    hist2.scale(find_ttbar_xsec(ids[ii].name)*N[names[ii]]/N_av)
-                    hist_comb = hist_comb+hist2
-                output_comb[key] = hist_comb
-            else:
-                cut_keys = list(output[key].keys())
-                len_new_keys = len(cut_keys)//3
-                output_comb["cutflow"] = {}
-                for cut in range(len_new_keys):
-                    output_comb["cutflow"]["Inclusive"+cut_keys[cut][4:]] = (output[key][cut_keys[cut]]*find_ttbar_xsec(names[0])*N[names[0]]/N_av +
-                                                                   output[key][cut_keys[cut+len_new_keys]]*find_ttbar_xsec(names[1])*N[names[1]]/N_av +
-                                                                   output[key][cut_keys[cut+2*len_new_keys]]*find_ttbar_xsec(names[2])*N[names[2]]/N_av 
-                                                                  )
-                    
-        output = output_comb
-        tag_full = tag + '_LHEflav1_TTBAR-Inclusive-JME'
-    
-    jeteta_bins.idx2str(2,precision=3)
-    pt_bins.idx2str(2)
-    
-    # etabins
     
     import warnings
     # warnings.filterwarnings('ignore') ### To suppress warnings with bad
     
-    def fit_responses(output, flavor='b'):
-        ''' Extract the jet flavor `flavor` from the histogram dictionary `output` and fit in all the eta and pt bins.
+    def fit_responses(hists, flavor='b', saveplots = None, scaled_hist=None):
+        ''' Extract the jet flavor `flavor` from the histogram dictionary `hists` and fit in all the eta and pt bins.
+        Add `scaled_hist` if to produce the response distributions with all the samples stacked up.
         Return a dictionary of ["Mean", "MeanVar", "Median", "MedianStd", "MeanRecoPt"] values.
         
         '''
         warnings.filterwarnings('ignore')  ### filter out the many fit warnings
-        saveplots = True
-        if test_run or eta_binning != "HCalPart":
-            saveplots = False
-        saveplots = False
+        if saveplots==None:
+            saveplots = False if test_run or eta_binning != "HCalPart" else True
             
-        response_hist, recopt_hist = add_flavors(output, flavor, combine_antiflavour)
+        response_hists = {}
+        recopt_hists = {}
+        if not scaled_hist==None:
+            for sample in scaled_hist:
+                response_hist, recopt_hist = add_flavors(scaled_hist[sample], flavor, combine_antiflavour) 
+                response_hist = rebin_hist(response_hist, 'jeteta' , jeteta_bins.edges)
+                recopt_hist = rebin_hist(recopt_hist, 'jeteta' , jeteta_bins.edges)
+                if sum_neg_pos_eta_bool==True:
+                    response_hist = sum_neg_pos_eta(response_hist)
+                    recopt_hist = sum_neg_pos_eta(recopt_hist)
+                response_hists[sample] = response_hist
+                recopt_hists[sample] = recopt_hist
+            
+        response_hist, recopt_hist = add_flavors(hists, flavor, combine_antiflavour)
         
         response_hist = rebin_hist(response_hist, 'jeteta' , jeteta_bins.edges)
         recopt_hist = rebin_hist(recopt_hist, 'jeteta' , jeteta_bins.edges)
@@ -497,43 +484,30 @@ def main():
         if saveplots and not os.path.exists(FitFigDir1):
             os.mkdir(FitFigDir1)
         
-        FitFigDir = FitFigDir1+'/response_pt_eta'+flavor+tag_full
-        if saveplots and not os.path.exists(FitFigDir):
-            os.mkdir(FitFigDir)
+        FitFigDir = FitFigDir1+'/response_pt_eta_'+flavor+tag_full
+        if saveplots:
+            if not os.path.exists(FitFigDir):
+                os.mkdir(FitFigDir)
             print("Response fits will be saved under ", FitFigDir)
         elif not saveplots:
             print("Response fits won't be saved")
     
-        xvals = response_hist.axes['ptresponse'].centers[1:] #[1:] to exclude the second peak for low pt
-        response_edges = response_hist.axes['ptresponse'].edges[1:]
-    
         for i in range(pt_bins.nbins):
-    #         pt_lo = ptbins[i]
-    #         pt_hi = ptbins[i+1]
-    #     #         print('-'*25)
-    
-    #         if not np.isinf(pt_hi):
-    #             pt_string = '_pT'+str(int(pt_lo))+'to'+str(int(pt_hi))
-    #         else:
-    #             pt_string = '_pT'+str(pt_lo) + 'to' + str(pt_hi)
-    #             pt_string = pt_string.replace('.0','').replace('-infto','0to')
-    
+    #     for i in range(4,10):
             for k in range(fiteta_bins.nbins):
+                if not scaled_hist==None:
+                    histos = {sample: response_hists[sample][i, :, k] for sample in response_hists}
+                    histos2plot = {key[10:]:histos[key] for key in histos.keys()}
+                    h_stack = hist.Stack.from_dict(histos2plot)
+                
                 histo = response_hist[i, :, k]
-                histopt = recopt_hist[i, k]
-                
-    #             etaPl_lo = jeteta_bins.edges[k] #etabins[+jeteta_length]
-    #             etaPl_hi = jeteta_bins.edges[k+1] #etabins[k+1+jeteta_length]
-    #             eta_string = '_eta'+str(etaPl_lo)+'to'+str(etaPl_hi)
-    #             eta_string = eta_string.replace('.','')
-                
-                yvals = histo.values()[1:]     #[1:] to exclude the second peak for low pt
+                histopt = recopt_hist[i, k]            
                 try:
                     Neff = histo.sum().value**2/(histo.sum().variance)
                 except ZeroDivisionError:
-                    Neff = histo.sum().value**2/(histo.sum().variance+1e-11)
+                    Neff = histo.sum().value**2/(histo.sum().variance+1e-20)
     
-                median, medianstd = get_median(xvals, yvals, response_edges, Neff)
+                median, medianstd = get_median(histo, Neff)
                 
                 ##################### Mean of the pt_reco  ######################
                 ### (The mean includes events that potentially had ptresponse in the second peak at low pt)
@@ -541,7 +515,7 @@ def main():
                 mean_reco_pt = histopt.value/np.sum(histo.values())
                 
                 ####################### Fitting ############################
-                p2, cov, chi2, Ndof, if_failed = fit_response(xvals, yvals, Neff)
+                p2, cov, chi2, Ndof, if_failed, fitlims = fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5)
                 if if_failed:
                     N_not_converge += 1
                 else:
@@ -553,12 +527,22 @@ def main():
                 results["Median"][i,k] = median
                 results["MedianStd"][i,k] = medianstd
                 results["MeanRecoPt"][i,k] = mean_reco_pt
-        #             chi2s[i,k] = chi2
     
         ####################### Plotting ############################
                 if  saveplots:
-                    figName = FitFigDir+'/ptResponse'+pt_bins.idx2str(i)+fiteta_bins.idx2str(i)
-                    plot_response_dist(histo, xvals, p2, cov, chi2, Ndof, median, medianstd, Neff, figName)              
+                    figName = FitFigDir+'/ptResponse'+pt_bins.idx2str(i)+fiteta_bins.idx2str(k)
+                    hep_txt = pt_bins.idx2plot_str(i)+'\n'+fiteta_bins.idx2plot_str(k)+'\n'+f'{flav} jet' 
+            
+                    txt2print = ('\n'+r'Mean = {0:0.3f}$\pm${1:0.3f}'.format(p2[1], np.sqrt(cov[1,1]))
+                                     + '\nWidth = {0:0.3f}$\pm${1:0.3f}'.format(np.abs(p2[2]), np.sqrt(cov[2,2]))
+                                     + '\n'+r'Median = {0:0.3f}$\pm${1:0.3f}'.format(median, medianstd)
+                                     + '\n'+r'$\chi^2/ndof$ = {0:0.2g}/{1:0.0f}'.format(chi2, Ndof)
+                                     + '\n'+r'Neff = {0:0.3g}'.format(Neff))
+                    plot_response_dist(histo, p2, fitlims,
+                                       figName, dataset_name=legend_label, hep_txt=hep_txt, txt2print=txt2print, print_txt=True)              
+                    if not scaled_hist==None:
+                        plot_response_dist_stack(h_stack, p2, fitlims,
+                                                 figName+'stack', hep_txt=hep_txt, print_txt=False )
     
         print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
         warnings.filterwarnings('default')
@@ -567,16 +551,18 @@ def main():
     
     # ### Run fitting for each sample
     
-    medians = []
-    medianstds = []
+    out_txt_path = "out_txt" #/no_lep_cuts/"
     
-    out_txt_path = 'out_txt/'
+    pltStyle(style='hep')
+    plt.rcParams['font.size'] = plt.rcParams['font.size']/0.98
     
     # %%time
-    # load_fit_res=False
+    
+    medians = []
+    medianstds = []
     combine_antiflavour = True
-    flavors = ['b', 'c', 'u', 'd', 's', 'g', 'q', 'ud', 'all', 'unmatched']
-    # flavors = ['b']
+    flavors = ['b', 'ud', 'all', 'g', 'c', 's', 'q', 'u', 'd', 'unmatched']
+    # flavors = ['q']
     # flavors = ['all', 'all_minus_b', 'b' ,'all_unmatched', 'unmatched']
     print('-'*25)
     print('-'*25)
@@ -592,7 +578,7 @@ def main():
                 result[key] = read_data(key, flav, tag_fit_res)
         
         else:
-            result = fit_responses(output, flav)
+            result = fit_responses(hists_merged, flav, saveplots=True) #scaled_hist
             medians.append(result["Median"][0][0])
             medianstds.append(result["MedianStd"][0][0])
             for key in result:
@@ -605,13 +591,86 @@ def main():
         
         meanstd = np.sqrt(result["MeanVar"])
                 
-        if one_bin: #or fine_etabins:
-            plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins.edges, jfiteta_bins.centres, tag_fit_res, flav)
+        if eta_binning=="one_bin": #or fine_etabins:
+            plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins, fiteta_bins.centres, tag_fit_res, flav, plotptvals=[20, 35, 150, 400])
         else:
-            plot_corrections(result["Median"], result["MedianStd"], pt_bins.centres, fiteta_bins.edges, tag_fit_res, flav)
+            plot_corrections(result["Median"], result["MedianStd"], pt_bins.centres, fiteta_bins, tag_fit_res, flav, plotetavals=[0, 1.305, 2.5, 3.139])
+    #         plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins, fiteta_bins.centres, tag_fit_res, flav, plotptvals=[20, 35, 150, 400])
+    
+    from helpers import find_result_file_index
+    log_file_name = "run_log.txt"
+    
+    if not load_preexisting or load_fit_res:
+        run_idx = find_result_file_index(log_file_name)
+        file_name_title = f'Run_index_{run_idx}'
+        # log_file = log_file_name.open('a')
+        with open(log_file_name, 'a') as log_file:
+            log_file.writelines(['\n' + file_name_title + '\nRun comment: ' + run_comment])
+            log_file.writelines(['\n' + printout, '\nConfig parameters:\n' + str(processor_config)])
     
     print('-----'*10)
     print("All done. Congrats!")
+    
+    # from scipy.optimize import curve_fit
+    # def fit_response(xvals, yvals, Neff, Nfit=3, sigma_fit_window=1.5):
+    #     ''' fit response distribution with `Nfit` consecutive gaussian fits
+    #     Perform the second and further fits around the mean+/-<sigma_fit_window>*std of the previous fit.
+    
+    #     '''
+    #     if_failed = False   #save if the fit failed or converged
+        
+    #     # once adding weights, Neff appears to be ~1/4 - 1/3 of N when not using weights,
+    #     # so changing limits to match the both cases
+    #     if (np.sum(yvals)-Neff)/Neff<1e-5:
+    #         N_min_limit=50
+    #     else:
+    #         N_min_limit=15
+        
+    #     nonzero_bins = np.sum(yvals>0)
+    #     if nonzero_bins<2 or Neff<N_min_limit:
+    #         p=[0,0,0]
+    #         chi2 = np.nan
+    #         cov = np.array([[np.nan]*3]*3)
+    #         Ndof = 0
+    #         if_failed = True
+    #     else:
+    #         try:
+    #             p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
+    # #             print("p vals 0 = ", p)
+    #             ######## Second Gaussian ########
+    #             for i in range(Nfit-1):
+    #                 xfit_l, xfit_h = np.searchsorted(xvals,
+    #                                                  [p[1]-np.abs(p[2])*sigma_fit_window,
+    #                                                   p[1]+np.abs(p[2])*sigma_fit_window])
+                    
+    #                 # if there are only 3pnts, the uncertainty is infty
+    #                 # (or if too small, then the fit doesn't become good),
+    #                 # so increase the range
+    #                 rangeidx = 0
+    #                 while len(range(xfit_l,xfit_h))<6 and rangeidx<3:
+    #                     xfit_l = xfit_l-1
+    #                     xfit_h = xfit_h+1
+    #                     rangeidx+=1
+    #                 if xfit_l<0:
+    #                     xfit_h-=xfit_l
+    #                     xfit_l = 0
+    #                 xvals2 = xvals[xfit_l: xfit_h]
+    #                 yvals2 = yvals[xfit_l: xfit_h]
+    #                 p, cov = curve_fit(gauss, xvals2, yvals2, p0=p)
+    # #                 print(f"p vals {i+1} = ", p)
+    #                  ######## End second Gaussian ########
+    
+    #             ygaus = gauss(xvals, *p)
+    #             chi2 = sum((yvals-ygaus)**2/(yvals+1E-9))
+    #             Ndof = len(xvals2)-3
+    #         except(RuntimeError):   #When fit failed
+    #             p=[0,0,0]
+    #             chi2 = np.nan
+    #             cov = np.array([[np.nan]*3]*3)
+    #             Ndof = 0
+    #             if_failed = True
+                
+    #     return [p, cov, chi2, Ndof, if_failed]
     
     # # flavor = 'g'
     # response_hist_dict = {}

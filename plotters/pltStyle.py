@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
-from matplotlib import colors as mcolors
+# from matplotlib import colors as mcolors
 from cycler import cycler
+import mplhep as hep
 
 # colour bling colors = [#00429d,#394c99,#545793,#686867,#737373,#df4639,#d76132,#ce7628,#c3891b,#b89a00]
 colourblind_cols = ["#920000", "#006ddb", "#24ff24","#db6d00",
                     "#004949","#b66dff","#b6dbff","#924900",
-                    "#ffff6d", "#490092","#009292","#ff6db6",
+                    "#ffda2d", "#490092","#009292","#ff6db6",
                     "#000000","#ffb6db", "#6db6ff" ]
 cols = ['#a6cee3', '#e31a1c','#1f78b4','#6a3d9a','#33a02c',
                             '#fb9a99', '#fdbf6f','#b2df8a','#ff7f00',
@@ -16,22 +17,31 @@ oldcols = ['#4C72B0', '#55A868', '#C44E52',
                     '#e377c2', '#7f7f7f',
                     '#bcbd22', '#17becf']
 
-def pltStyle(style='paper'):
+def pltStyle(style='hep', size_frac=2.5, font_frac=1.15):
+    ''' Set the style of the plots.
+    style: str, a style of the plot. Available: 'hep', 'paper', 'presentation-square', 'paperFull', 'paperThreeRows', 'paperTwoRows'
+    size_frac: float, reduce the size of the plot by this factor (only for 'hep' style)
+    font_frac: float, increase the size of the font by this factor (only for 'hep' style)
+    '''
     plt.style.use('default')
     plt.style.use('seaborn-paper')
     cols_cyc = cycler(color=colourblind_cols)
     markers_cyc = cycler(marker=['o','s', 'p','d', 'D', 'H', '^']*2+['v'])
 
     if style=='hep':
-        import mplhep as hep
+        '''Adapted from the mplhep CMS style'''
         hep.style.use("CMS")
         plt.rc('font', family='serif')
 
-        ### make the size of the plot size_frac x smaller, but keep all the sizes relativelly the same
-        size_frac = 2.5
+        ### make the size of the plot size_frac x smaller, but keep all the sizes relatively the same
         hep_parms = plt.rcParams
+        plt.rcParams['figure.subplot.left'] = 0.135*font_frac
+        plt.rcParams['figure.subplot.bottom'] = hep_parms['figure.subplot.bottom']*font_frac
+        plt.rcParams['figure.subplot.top'] = 1-0.06*font_frac
+        plt.rcParams['figure.subplot.right'] = 0.96
+
         plt.rcParams['figure.figsize'] = [hep_parms['figure.figsize'][i]/size_frac for i in range(2)]
-        plt.rcParams['font.size'] = hep_parms['font.size']/size_frac*1.15
+        plt.rcParams['font.size'] = hep_parms['font.size']/size_frac*font_frac
         plt.rcParams['xtick.major.size'] = plt.rcParams['ytick.major.size'] = hep_parms['xtick.major.size']/size_frac
         plt.rcParams['xtick.minor.size'] = plt.rcParams['ytick.minor.size'] = hep_parms['xtick.minor.size']/size_frac
         plt.rcParams['legend.borderpad'] = hep_parms['legend.borderpad']/size_frac

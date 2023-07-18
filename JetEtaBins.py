@@ -25,7 +25,7 @@ class JetBins():
             dimension = ' '+dimension
         if isinstance(idx, Iterable):
             idx = idx[0]
-        outstr = f'$ {np.round(self.edges[idx],precision)}<{var_name}<{np.round(self.edges[idx+1],precision)}${dimension}'
+        outstr = f'${np.round(self.edges[idx],precision)}<{var_name}<{np.round(self.edges[idx+1],precision)}${dimension}'
         return outstr
 
     def idx2str(self, idx, precision=3, var_name='eta'):

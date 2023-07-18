@@ -1,5 +1,6 @@
 ### File borrowed from
 ### https://gitlab.cern.ch/cms-jetmet/JERCProtoLab/-/blob/master/macros/common_info/common_binning.py
+### but updated but many new binnings used/tried in MC truth flavor analysis.
 
 import parse
 import numpy as np
@@ -51,6 +52,14 @@ class JERC_Constants():
         return mirrorMiPlbins(JERC_Constants.etaBinsEdges_JERC())
 
     @staticmethod
+    def etaBinsEdges_Summer20Flavor():
+        return [0.000, 0.261, 0.522, 0.783, 1.044, 1.305, 1.566, 1.740, 1.930, 2.043, 2.172, 2.500, 2.964, 5.191]
+
+    @staticmethod
+    def etaBinsEdges_Summer20Flavor_full():
+        return mirrorMiPlbins(JERC_Constants.etaBinsEdges_Summer20Flavor())
+
+    @staticmethod
     def ptBinsEdgesMCTruth():
         return [15.0, 17.0, 20.0, 23.0, 27.0, 30.0, 35.0, 40.0, 45.0, 57.0, 72.0, 90.0, 120.0, 150.0, 200.0, 300.0, 400.0, 550.0, 750.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 10000]
 
@@ -84,8 +93,9 @@ class JERC_Constants():
                 "CoarseCalo": JERC_Constants().etaBinsEdges_Aut18(),
                 "JERC" : JERC_Constants().etaBinsEdges_JERC(),
                 "CaloTowers": JERC_Constants().etaBinsEdges_CaloTowers(),
-                "one_bin": JERC_Constants().etaBinsEdges_onebin_full(),
+                "one_bin": JERC_Constants().etaBinsEdges_onebin(),
                 "Uncert": JERC_Constants().etaBinsEdges_Uncert(),
+                "Summer20Flavor": JERC_Constants().etaBinsEdges_Summer20Flavor(),
                 }
         else:
             return {
@@ -95,6 +105,7 @@ class JERC_Constants():
                 "CaloTowers": JERC_Constants().etaBinsEdges_CaloTowers_full(),
                 "one_bin": JERC_Constants().etaBinsEdges_onebin_full(),
                 "Uncert": JERC_Constants().etaBinsEdges_Uncert_full(),
+                "Summer20Flavor": JERC_Constants().etaBinsEdges_Summer20Flavor_full(),
                 }
     
     def StrToPtBinsDict():

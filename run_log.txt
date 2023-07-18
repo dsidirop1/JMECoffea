@@ -1,0 +1,17 @@
+
+Run_index_1
+Run comment: 
+The data tag "QCD-Py" found in the dataset_dictionary. The dataset "fileNames/QCD20UL18_JMENano.txt" will be used.Running on the number of files: 1
+ Job with the full tag _L5_QCD-Py_test
+ Outname = out/CoffeaJERCOutputs_L5_QCD-Py_test.coffea
+Config parameters:
+'good_lepton_cut': {'apply': True}, 'tight_lepton_veto_id': {'apply': True}, 'recolep_drcut': {'apply': True}, 'jet_pt_cut': {'apply': True, 'mingenjetpt': 15}, 'leading_jet_and_alpha_cut': {'apply': True, 'alphaQCD': 1.0, 'alphaDY': 1.0, 'NjetsQCD': 3, 'NjetsDY': 2}, 'select_Nth_jet': {'apply': True, 'N': 2}, 'jet_iso_cut': {'apply': False}, 'jetflavour': 'partonFlavour'}
+
+Run_index_2
+Run comment: Running QCD-MG-Py with 2leading jets and no isolation cut as previous calculations had this sample missing for some reason 
+ and it was found that no isolation cut impacts QCD-Py a lot
+The data tag "QCD-MG-Py" found in the dataset_dictionary. The dataset "fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt" will be used.Running on the number of files: 10
+ Job with the full tag _L5_QCD-MG-Py_2leadingjets_noiso
+ Outname = out/CoffeaJERCOutputs_L5_QCD-MG-Py_2leadingjets_noiso.coffea
+Config parameters:
+{'good_lepton_cut': {'apply': True}, 'tight_lepton_veto_id': {'apply': True}, 'recolep_drcut': {'apply': True}, 'jet_pt_cut': {'apply': True, 'mingenjetpt': 15}, 'leading_jet_and_alpha_cut': {'apply': True, 'alphaQCD': 1.0, 'alphaDY': 1.0, 'NjetsQCD': 2, 'NjetsDY': 2}, 'select_Nth_jet': {'apply': False, 'N': 2}, 'jet_iso_cut': {'apply': False}, 'jetflavour': 'partonFlavour'}
