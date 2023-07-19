@@ -33,7 +33,7 @@ import awkward as ak
 # from coffea import some_test_func
 # some_test_func.test_func()
 
-manual_bins = [400, 500, 600, 800, 1000, 1500, 2000, 3000, 7000, 10000]
+# manual_bins = [400, 500, 600, 800, 1000, 1500, 2000, 3000, 7000, 10000]
 ptbins = np.array(JERC_Constants.ptBinsEdgesMCTruth())
 etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
 

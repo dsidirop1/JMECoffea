@@ -363,7 +363,30 @@ def get_xsecs_filelist_from_file(file_path, data_tag, test_run=False):
     xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
     file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
     return xsec_dict, file_dict
-    
+
+
+def get_xsec_dict(data_tag, dataset_dictionary):
+    ''' Load a text file with cross sections and file names as a dictionary `xsec_dict`.
+    '''
+    ### if the 'data_tag' in the root contains any of the tags in `dataset_dictionary`, select this tag,
+    ### e.g.,'QCD-Py_weights' contains 'QCD-Py', so select xsec from 'QCD-Py'.
+    keys = np.array(list(dataset_dictionary.keys()))
+    matching_keys =  keys[np.where([ key in data_tag for key in keys])[0]]
+    if len(matching_keys)>1:
+        raise ValueError(f"More than one key from the dataset dictionary matches the given data_tag = {data_tag}")
+    elif len(matching_keys)==1:
+        matching_key = matching_keys[0]
+        dataset, xsec, label = dataset_dictionary[matching_key]
+        if (dataset is None) and (xsec is not None):
+            xsec_dict, file_dict = get_xsecs_filelist_from_file(xsec, matching_key)
+        else:
+            xsec_dict = {matching_key: 1}
+        legend_label = label
+    else:
+        xsec_dict = {data_tag: 1}
+        legend_label = data_tag
+        
+    return xsec_dict, legend_label
 
 def find_result_file_index(ResultFile):
     ResultFileName = Path.cwd() / ResultFile
