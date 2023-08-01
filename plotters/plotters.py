@@ -3,6 +3,10 @@ import matplotlib as mpl
 import numpy as np
 import mplhep as hep
 import os
+import sys
+# top_path = '../'
+# if top_path not in sys.path:
+#     sys.path.append(top_path)
 from common_binning import JERC_Constants
 
 def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=[0, 1.305, 2.5, 3.139]):

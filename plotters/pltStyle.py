@@ -35,10 +35,10 @@ def pltStyle(style='hep', size_frac=2.5, font_frac=1.15):
 
         ### make the size of the plot size_frac x smaller, but keep all the sizes relatively the same
         hep_parms = plt.rcParams
-        plt.rcParams['figure.subplot.left'] = 0.135*font_frac
+        plt.rcParams['figure.subplot.left'] = 0.14*font_frac
         plt.rcParams['figure.subplot.bottom'] = hep_parms['figure.subplot.bottom']*font_frac
         plt.rcParams['figure.subplot.top'] = 1-0.06*font_frac
-        plt.rcParams['figure.subplot.right'] = 0.96
+        plt.rcParams['figure.subplot.right'] = 0.95
 
         plt.rcParams['figure.figsize'] = [hep_parms['figure.figsize'][i]/size_frac for i in range(2)]
         plt.rcParams['font.size'] = hep_parms['font.size']/size_frac*font_frac

@@ -1,7 +1,8 @@
 #CoffeaJERCProcessor_L5.py
-''' coffea processor for calculating the jet enegy response and splitting the sample into jet flavors:
+''' coffea processor for calculating the jet energy response in bins of pt_ptcl and jet_eta.
+    The processor makes a separate histogram for each jet flavor.
 output: a dictionary over datasets of dictionaries over histograms.
-Output histograms: ptresponse histogram, pt_reco histogram for each flavor and the cuflow
+output histograms: ptresponse histogram, pt_reco histogram for each flavor and the cutflow
 ''' 
 
 from memory_profiler import profile
@@ -207,7 +208,8 @@ class Processor(processor.ProcessorABC):
         output['cutflow'].fill(cutflow=f'events, alpha cut',       weight=len(selectedEvents))
         
         # # Cut on overlapping jets
-        # reco_jets = jet_iso_cut(reco_jets)
+        if self.processor_config["jet_iso_cut"]["apply"]==True:
+            reco_jets = jet_iso_cut(reco_jets)
         output['cutflow'].fill(cutflow='iso jets', weight=ak.sum(ak.num(reco_jets)))
         gen_jets = reco_jets.matched_gen
 
@@ -232,10 +234,10 @@ class Processor(processor.ProcessorABC):
         
         ptresponse_np = jetpt / gen_jetpt #/ self.closure_corr[correction_pos_pt, correction_pos_eta]
         
-        try:
-            weights = selectedEvents.LHEWeight.originalXWGTUP
-        except AttributeError: ### no LHEWeight.originalXWGTUP in madgraph herwig but Generator.weight instead
+        if 'LHEWeight' not in selectedEvents.fields: ### no LHEWeight.originalXWGTUP stored in standalone Pythia8 but Generator.weight instead
             weights = selectedEvents.Generator.weight
+        else:
+            weights = selectedEvents.LHEWeight.originalXWGTUP
     
         weights2 = np.repeat(weights, shapes_jets)
 

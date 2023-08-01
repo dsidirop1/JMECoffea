@@ -69,14 +69,14 @@ def main():
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False   ### True if run only on one file and five chunks to debug processor
 
-    Nfiles = -1                 ### -1 for all files
+    Nfiles = -1                 ### number of files for each sample; -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
-    # processor_name = 'CoffeaJERCProcessor'+tag_Lx
-    # from CoffeaJERCProcessor_L5_config import processor_config, processor_dependencies
-    processor_name = 'draw_HT_spectrum'
-    processor_config = None
-    processor_dependencies = []
+    processor_name = 'CoffeaJERCProcessor'+tag_Lx
+    from CoffeaJERCProcessor_L5_config import processor_config, processor_dependencies
+    # processor_name = 'Processor_HT_spectrum'
+    # processor_config = None
+    # processor_dependencies = []
 
 
     
@@ -84,15 +84,22 @@ def main():
     ### Or manually by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'QCD-MG-Py' # 'QCD-MG-Her' #'Herwig-TTBAR' 
+    data_tag = 'Herwig-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
     # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '' #'_3rd_jet' # _cutpromtreco _Aut18binning   
-    run_comment = ''                          #### Comment for the log file: e.g., why the run is made?
+    add_tag = '_iso_cut' #'_3rd_jet' # _cutpromtreco _Aut18binning   
+    run_comment = 'Rerunning the isolation cut run with all the statistics'                          #### Comment for the log file: e.g., why the run is made?
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
-    condor_log_dir = '/eos/user/a/anpotreb/condor/log'
-    
+
+    import datetime
+    log_basename = "/condor_coffea_log/condor_coffea_log_"
+    suffix = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+    # tmpdir = os.environ['TMPDIR']+log_basename+suffix
+    # tmpdir = os.environ['HOME']+'/log/'+log_basename+suffix
+    # condor_log_dir = tmpdir
+    username = os.environ['USER']
+    condor_log_dir = '/eos/home-'+username[0]+'/'+username+log_basename+suffix
     # ### Specify datasets separatelly
     dataset = None
     fileslist = None
@@ -108,7 +115,7 @@ def main():
     ################ End of Parameters of the run and switches  #########################
     
     # ### Obtain the dataset and cross-sections from the dataset_dictionary. Define and print the information about the run.
-    printout = ''  ### to be used in the saved output to .txt
+    printout = f'Processor {processor_name} will be run on {executor}.\n'  ### to be used in the saved output to .txt
     tag_full = tag_Lx+'_'+data_tag+add_tag
     if not (fileslist is None):
         xsec = 1
@@ -152,7 +159,8 @@ def main():
     if test_run:
         Nfiles = 1
     
-    printout_tmp = f'Running on the number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname}'
+    printout_tmp = f'Running on the number of files: {Nfiles}\n Job with the full tag {tag_full}\n Outname = {outname} \n'
+    printout_tmp += f'condor log will be saved under {condor_log_dir}'     if executor == 'condor' else '' 
     print(printout_tmp)
     printout += printout_tmp
     
@@ -191,7 +199,9 @@ def main():
     if(executor == 'coffea-casa'):
        from dask.distributed import Client 
        client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")
-       client.upload_file('CoffeaJERCProcessor.py')
+       client.upload_file(processor_name+'.py')
+       for dep in processor_dependencies:
+          client.upload_file(dep)
     
     if(executor=='condor' or executor=='dask'):
         from dask.distributed import Client 
@@ -237,7 +247,7 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    chunksize = 10000
+    chunksize = 1000
     # maxchunks = 100
     
     if not load_preexisting:
@@ -286,13 +296,13 @@ def main():
         cluster.close()
     
     from helpers import find_result_file_index
-    log_file_name = "run_log.txt"
+    run_log_name = "run_log.txt"
     
     if not load_preexisting:
-        run_idx = find_result_file_index(log_file_name)
+        run_idx = find_result_file_index(run_log_name)
         file_name_title = f'Run_index_{run_idx}'
-        # log_file = log_file_name.open('a')
-        with open(log_file_name, 'a') as log_file:
+        # log_file = run_log_name.open('a')
+        with open(run_log_name, 'a') as log_file:
             log_file.writelines(['\n' + file_name_title + '\nRun comment: ' + run_comment])
             log_file.writelines(['\n' + printout, '\nConfig parameters:\n' + str(processor_config)])
     
