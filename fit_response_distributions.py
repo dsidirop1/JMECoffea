@@ -34,18 +34,18 @@ import os
 
 ### import subpackages
 from helpers import hist_add, hist_mult, hist_div, dictionary_pattern, sum_subhist, xsecstr2float, get_xsec_dict
-from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors, fit_response
+from helpers import save_data, read_data, get_median, gauss, slice_histogram, add_flavors, fit_response, barable_flavors
 from plotters.plotters import plot_response_dist, plot_corrections, plot_corrections_eta, plot_response_dist_stack
 
 from helpers import rebin_hist, mirror_eta_to_plus, sum_neg_pos_eta, find_ttbar_xsec
 from common_binning import JERC_Constants
 from fileNames.available_datasets import dataset_dictionary
 
-def main():
+def main(data_tag='Pythia-TTBAR'):
     # The script fits the response histograms (or calculates the medians) and creates the `txt` files with the fit results (one fle for each `Mean`, `MeanVar`, `Median`, `MedianStd`, `MeanRecoPt`)
 
     ################ Parameters of the run and switches  #########################
-    test_run            = True   ### True if run only on one file and five chuncs to debug processor
+    test_run            = False   ### True if run only on one file and five chuncs to debug processor
     load_fit_res        = False   ### True if only replot the fit results without redoing histogram fits
     saveplots           = False    ### True if save all the response distributions. There are many eta/pt bins so it takes time and space
     combine_antiflavour = True    ### True if combine the flavor and anti-flavour jets into one histogram
@@ -54,7 +54,7 @@ def main():
     ### HCalPart: bin in HCal sectors, CaloTowers: the standard JERC binning,
     ### CoarseCalo: like 'CaloTowers' but many bins united; onebin: combine all eta bins
     ### Preprocessing always done in CaloTowers
-    eta_binning  = "HCalPart"  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
+    eta_binning  = "Summer20Flavor"  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
     sum_neg_pos_eta_bool=True  ### if combining the positive and negative eta bins
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
@@ -62,10 +62,10 @@ def main():
     ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'QCD-Py' # 'QCD-MG-Her' #'Herwig-TTBAR' 
+    # data_tag = 'Herwig-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
     # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '' #'_3rd_jet' # _cutpromtreco _Aut18binning   
+    add_tag = '_iso_cut' #'_3rd_jet' # _cutpromtreco _Aut18binning   
 
 
 
@@ -80,7 +80,9 @@ def main():
     
     if eta_binning != "HCalPart":
         tag_fit_res=tag_full+'_'+eta_binning
-        
+    combine_antiflavour_txt = '_split_antiflav' if not combine_antiflavour else ''
+    tag_fit_res += combine_antiflavour_txt
+
     if not os.path.exists("out"):
         os.mkdir("out")
             
@@ -224,13 +226,11 @@ def main():
     
     # ### Run fitting for each sample
     
-    out_txt_path = "out_txt" #/no_lep_cuts/"
-    
     medians = []
     medianstds = []
     flavors = ['b', 'ud', 'all', 'g', 'c', 's', 'q', 'u', 'd', 'unmatched']
-    # flavors = ['q']
-    # flavors = ['all', 'all_minus_b', 'b' ,'all_unmatched', 'unmatched']
+    if not combine_antiflavour:
+        flavors = np.concatenate([[flav, flav+'bar'] if flav in barable_flavors else [flav] for flav in flavors ])
     print('-'*25)
     print('-'*25)
     print(f'Starting to fit each flavor in: {flavors}')
@@ -267,4 +267,6 @@ def main():
     print("All done. Congrats!")
   
 if __name__ == "__main__":
-    main()
+    data_tags = ['Pythia-TTBAR', 'Herwig-TTBAR', 'QCD-MG-Py', 'QCD-MG-Her', 'QCD-Py', 'DY-MG-Py', 'DY-MG-Her']
+    for data_tag in data_tags:
+        main(data_tag=data_tag)

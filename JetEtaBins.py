@@ -88,6 +88,7 @@ class PtBins(JetBins):
         if not self.bin_type in bin_dict.keys():
             raise ValueError(f"The pt bin type not in available binnings. Available binnings: {bin_dict.keys()}. The key given {self.bin_type}")
         if self.bin_type=='Uncert':
+            self.edges = np.array(bin_dict[self.bin_type])
             self.centres = np.array(bin_dict[self.bin_type])
         else:
             self.edges = np.array(bin_dict[self.bin_type])

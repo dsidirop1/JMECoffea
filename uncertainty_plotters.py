@@ -9,10 +9,16 @@ from coffea.lookup_tools import extractor
 from scipy.optimize import curve_fit
 
 color_scheme = {key: cycler_vals
-    for cycler_vals, key in zip(plt.rcParams['axes.prop_cycle'], ['g', 'ud', 'c', 'b', 'QCD', 'DY', 'TTBAR', 'DY200', 'unmatched', 's'])}
+    for cycler_vals, key in zip(plt.rcParams['axes.prop_cycle'], ['g', 'ud', 'c', 'b', 'QCD', 'DY', 'TTBAR', 'DY200', 'unmatched', 's', 'q'])}
+color_scheme_antiflav = {key: cycler_vals
+    for cycler_vals, key in zip(plt.rcParams['axes.prop_cycle'], ['g', 'udbar', 'cbar', 'bbar', 'QCD', 'DY', 'TTBAR', 'DY200', 'unmatched', 'sbar', 'qbar'])}
+color_scheme = color_scheme | color_scheme_antiflav
 
-leggend_dict = {'g': 'Gluons', 'q': 'Quarks', 'ud':'Light', 'b': 'Bottom', 'c': 'Charm', 's': 'Strange', 'unmatched': 'Unmatched'}
-leggend_dict_short = {'g': 'g', 'ud': 'ud', 'b': 'b', 'c': 'c', 's':'s', 'unmatched': 'unmatched'}
+legend_dict = {'g': 'Gluons', 'q': 'Quarks', 'ud':'UpDown', 'b': 'Bottom', 'c': 'Charm', 's': 'Strange', 'unmatched': 'Unmatched'}
+legend_dict_short = {'g': 'g',
+                     'ud': 'ud', 'q':'q', 'b': 'b', 'c': 'c', 's':'s',
+                     'unmatched': 'unmatched',
+                     'udbar': '$\overline{ud}$', 'qbar':'$\overline{q}$', 'bbar': '$\overline{b}$', 'cbar': '$\overline{c}$', 'sbar':'$\overline{s}$'}
 
 def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, saveplot=False):
     samples = list(sampledict.keys())
@@ -34,7 +40,7 @@ def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, saveplot=False):
     xplot2 = np.geomspace(ptbins_c_plot.min(), ptbins_c_plot.max(),1000)
     points_ls = []
     for flav in qfracs0.keys():
-        lab = leggend_dict_short[flav]
+        lab = legend_dict_short[flav]
 #         mc = next(ax._get_lines.prop_cycler)
 
         points = ax.errorbar(ptbins_c_plot, qfracs0[flav][plot_range, etaidx],
@@ -53,7 +59,7 @@ def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, saveplot=False):
         ax.plot(xplot2, spline2D1[flav]((np.log10(xplot2), np.repeat([jeteta_bins.centres[etaidx]],len(xplot2)))),
               '-.', markersize=0, **color_scheme[flav], linewidth=1.0)
 # interp((np.log(np.arange(20,60,2)),[1]*20))
-        if 'g' == flav:
+        if list(qfracs0.keys())[0] == flav:
             points_ls.append(points[0])
             points_ls.append(points2[0])
         
@@ -188,7 +194,7 @@ def plot_spectra(histdict, labels, flav, etaidx, jeteta_bins, ptbins, saveplot=T
     plt.show()
 1;
 
-from uncertainty_helpers import get_ratio, read_data2, read_corrections
+from uncertainty_helpers import get_ratio, read_data2
 
 def poly4(x, *p):
     c0, c1, c2, c3, c4 = p
@@ -208,7 +214,7 @@ color_scheme2 = color_scheme.copy()
 color_scheme2['QCD, 3 jets'] = {'color': 'brown', 'marker': 'o'}
 color_scheme2['DY, 2 jets'] = {'color': 'cyan', 'marker': 'o'}
 
-def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binning_str, divide=False, inverse=False, use_recopt=False):
+def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binning_str, correction_txt_dir, correction_txt, divide=False, inverse=False, use_recopt=False, plotsimfit=False):
     ''' Put ratio plots of many all flavors at the same place. Reproduce Fig. 31 in arXiv:1607.03663
     Output, polynomial coeficients of the data ratio fit
     divide: True if divide Herwig by Pythia, False if subtract
@@ -241,10 +247,16 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
 #     print('etaidx = ', etaidx)
 
     #### Read the fitted corrections
-    corr_loc_Sum20_Py = [f"* * Summer20UL18_V2_MC/Summer20UL18_V2_MC_L5Flavor_AK4PFchs{eta_binning_str}.txt"]
-    corr_loc_Sum20_Her = [f"* * Summer20UL18_V2_MC/Summer20UL18_V2_MC_L5Flavor_AK4PFchs_Her{eta_binning_str}.txt"]
+    corr_loc_Sum20_Py = [f"* * {correction_txt_dir}/{correction_txt}{eta_binning_str}.txt"]
+    corr_loc_Sum20_Her = [f"* * {correction_txt_dir}/{correction_txt}_Her{eta_binning_str}.txt"]
+    if plotsimfit:
+        corr_loc_Sum20_Py_simfit = [f"* * {correction_txt_dir}/{correction_txt}_simfit{eta_binning_str}.txt"]
+        corr_loc_Sum20_Her_simfit = [f"* * {correction_txt_dir}/{correction_txt}_simfit_Her{eta_binning_str}.txt"]
     ext = extractor()
-    ext.add_weight_sets(corr_loc_Sum20_Py+corr_loc_Sum20_Her)
+    if plotsimfit:
+        ext.add_weight_sets(corr_loc_Sum20_Py+corr_loc_Sum20_Her+corr_loc_Sum20_Py_simfit+corr_loc_Sum20_Her_simfit)
+    else:
+        ext.add_weight_sets(corr_loc_Sum20_Py+corr_loc_Sum20_Her)
     ext.finalize()
     evaluator = ext.make_evaluator()
         
@@ -276,8 +288,9 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
     for fit_samp, lab in zip(['J', 'T'], ['QCD', 'TTBAR']):
         etaval = jeteta_bins.centres[etaidx]
         xvals_cont = np.geomspace(np.min(xvals), np.max(xvals), 100)
-        yvals_cont = evaluator[f'Summer20UL18_V2_MC_L5Flavor_AK4PFchs_Her{eta_binning_str}_{flav}{fit_samp}'](np.array([etaval]),xvals_cont)
-        yvals_cont_d = evaluator[f'Summer20UL18_V2_MC_L5Flavor_AK4PFchs{eta_binning_str}_{flav}{fit_samp}'](np.array([etaval]),xvals_cont)
+        yvals_cont = evaluator[f'{correction_txt}_Her{eta_binning_str}_{flav}{fit_samp}'](np.array([etaval]),xvals_cont)
+        yvals_cont_d = evaluator[f'{correction_txt}{eta_binning_str}_{flav}{fit_samp}'](np.array([etaval]),xvals_cont)
+
         if inverse==True:
             yvals = 1/yvals
             yvals_d = 1/yvals_d
@@ -291,7 +304,15 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
 
         ratios_cont = get_ratio(yvals_cont, yvals_cont_d, divide)
         ax.plot(xvals_cont, ratios_cont, markersize=0, **color_scheme[lab], label=lab+' fit')
-    
+
+    if plotsimfit:
+        yvals_cont_simfit = evaluator[f'{correction_txt}_simfit_Her{eta_binning_str}_{flav}J'](np.array([etaval]),xvals_cont)
+        yvals_cont_d_simfit = evaluator[f'{correction_txt}_simfit{eta_binning_str}_{flav}J'](np.array([etaval]),xvals_cont)
+        yvals_cont_simfit = 1/yvals_cont_simfit
+        yvals_cont_d_simfit = 1/yvals_cont_d_simfit
+        ratios_cont_simfit = get_ratio(yvals_cont_simfit, yvals_cont_d_simfit, divide)
+        ax.plot(xvals_cont, ratios_cont_simfit, markersize=0, label='simultaneous fit')
+
     ax.set_xscale('log')
     xlims = ax.get_xlim()
     
@@ -369,8 +390,64 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
     plt.show()
     return [p_poly4, xfitmin, xfitmax]
 
+def plot_uncertainty_antiflav(ptvals, etavals, HerPy_differences, additional_uncertainty_curves, uncertainties, ptoretastr, flavors, plotvspt=False):
+    addc = additional_uncertainty_curves
+    fig, ax = plt.subplots()
 
-def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_curves, uncertainties, ptoretastr, plotvspt=False):
+    xvals = ptvals if plotvspt else etavals
+    flav_labs = []
+    antiflav_labs = []
+
+    for flav in flavors:
+        lab = legend_dict_short[flav]
+        norm_factor = 0               # no normalization for flal/antiflav uncertainty
+
+        linestyle = '-.' if 'bar' in flav else '-'
+        line = ax.plot(xvals, (addc[f'{flav}100']-norm_factor)*100, label=lab, markersize=0, linewidth=1.2, linestyle=linestyle,
+                **color_scheme[flav])
+        if 'bar' in flav:
+            antiflav_labs.append(line[0])
+        else:
+            flav_labs.append(line[0])
+    
+    ax.hlines(0, ax.get_xlim()[0], ax.get_xlim()[1],color="gray",
+        linewidth=1, alpha=0.4)
+
+    legend1 = ax.legend(handles=antiflav_labs, loc='upper right', bbox_to_anchor=(0.52, 1), handlelength=1.5, title='antiflavor', title_fontsize=10)
+    leg2 = ax.legend(handles=flav_labs, ncol=1, loc='upper left', bbox_to_anchor=(0.47, 1), handlelength=0.9, title='flavor' , title_fontsize=10)#, title='assembled\nfrom QCD', title_fontsize=10)
+    ax.add_artist(legend1)
+    xlabel = r'$p_{T}$ (GeV)' if plotvspt else r'$\eta$'
+    ax.set_xlabel(xlabel);
+    ylabel = 'JEC uncertainty (%)'
+    ax.set_ylabel(ylabel);
+    if plotvspt:
+        ax.set_xscale('log')
+        ax.set_xticks([10, 20, 50, 100, 500, 1000, 5000])
+        ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+        ax.set_xlim(15,1000)
+
+    # ax.set_ylim(0.9885,1.0205)
+    ylim_old = ax.get_ylim()
+    ylim_pad = (ylim_old[1]-ylim_old[0])*0.4 if plotvspt else (ylim_old[1]-ylim_old[0])*0.62
+    ax.set_ylim(ylim_old[0],ylim_old[1]+ylim_pad)
+    labtxt = f'{ptoretastr}' #if plotvspt else f'{ptoretastr}'
+#     labtxt = f'$\eta$ = {etabins_abs[ptoretaidx]}' if plotvspt else f'$p_T$ = {ptbins_c[ptoretaidx]} GeV'
+    hep.label.exp_text(text=labtxt, loc=0)
+    figdir = "fig/uncertainty"
+    if not os.path.exists(figdir):
+        os.mkdir(figdir)
+
+    if plotvspt:
+        fig_name = figdir+f"/JECuncertainty_vs_pt_eta_{ptoretastr}".replace('.','')
+    else:
+        fig_name = figdir+f"/JECuncertainty_vs_pt_pt_{ptoretastr}".replace('.','_')
+    fig_name = fig_name.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '')
+    print("Saving plot with the name = ", fig_name+".pdf / .png")
+    plt.savefig(fig_name+'.pdf');
+    plt.savefig(fig_name+'.png');
+    plt.show()
+
+def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_curves, uncertainties, ptoretastr, flavors, plotvspt=False):
     addc = additional_uncertainty_curves
     fig, ax = plt.subplots()
 
@@ -383,26 +460,20 @@ def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_
                 linewidth=1.2, **color_scheme[samp])
         old_uncs.append(old_unc[0])
 
-#     next(ax._get_lines.prop_cycler) ## allign colors with plot_HerPydiff (skip 20%glu)
     for flav in ['g', 'q', 'b', 'c']:
         color = color_scheme[flav] if flav!='q' else color_scheme['ud']
         old_unc = ax.plot(xvals, (uncertainties[flav](etavals, ptvals)[:,0]-1)*100, '-.', markersize=0, linewidth=1.0,
                 **color, alpha=0.6)
         old_uncs.append(old_unc[0])
-    for flav in ['g', 'ud', 'b', 'c', 's']:
-        lab = leggend_dict[flav]
+
+    for flav in flavors:
+        lab = legend_dict[flav]
         ax.plot(xvals, (addc[f'{flav}100']-addc['Rref'])*100, label=lab, markersize=0, linewidth=1.2,
                 **color_scheme[flav])
-#     ax.plot(xvals, (addc['q100']-addc['Rref'])*100, label='Quarks', markersize=0, linewidth=1.2)
-#     ax.plot(xvals, (addc['b100']-addc['Rref'])*100, label='Bottom', markersize=0, linewidth=1.2)
-#     val_glu = flav_evaluator['Summer19UL18_V5_MC_UncertaintySources_AK4PFchs_FlavorPureGluon'](etavals, ptvals)[:,0]
-#     ax.plot(xvals, (1-val_glu)*100, label='Gluons old', markersize=0, linewidth=1.2)
     
-    ax.hlines(1, ax.get_xlim()[0], ax.get_xlim()[1],color="gray",
+    ax.hlines(0, ax.get_xlim()[0], ax.get_xlim()[1],color="gray",
         linewidth=1, alpha=0.4)
 
-#     legloc = 'upper left' if plotvspt else 'upper right'
-#     legloc = 'upper left' if plotvspt else 'upper right'
     legend1 = ax.legend(old_uncs, ['']*len(old_uncs), loc='upper right', bbox_to_anchor=(0.52, 1), handlelength=1.5, title='Run 1', title_fontsize=10)
     leg2 = ax.legend(ncol=1, loc='upper left', bbox_to_anchor=(0.47, 1), handlelength=0.9, title='Run 2' , title_fontsize=10)#, title='assembled\nfrom QCD', title_fontsize=10)
     ax.add_artist(legend1)
@@ -437,9 +508,7 @@ def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_
     plt.savefig(fig_name+'.png');
     plt.show()
 
-    1;
-
-def plot_HerPydiff(ptvals, HerPy_differences, additional_uncertainty_curves, divideHerPy, etaidx, jeteta_bins, pt_bins, pltstr2):
+def plot_HerPydiff(ptvals, HerPy_differences, additional_uncertainty_curves, divideHerPy, etaidx, jeteta_bins, pt_bins, pltstr2, flavors, combine_antiflavour):
     addc = additional_uncertainty_curves
     fig, ax = plt.subplots()
 
@@ -449,16 +518,19 @@ def plot_HerPydiff(ptvals, HerPy_differences, additional_uncertainty_curves, div
 #         mc = next(ax._get_lines.prop_cycler)
         line = ax.plot(ptvals, HerPy_differences[samp][0], linestyle=(0, (3.3, 2)), markersize=0, **color_scheme[samp], linewidth=1.2)
         marker = ax.errorbar(pt_bins.centres, HerPy_differences[samp][1], yerr=HerPy_differences[samp][2],
-                           linestyle='none', **color_scheme[samp], capsize=1.6, capthick=0.7, linewidth=1.0)
-        lines.append(line[0])
+                        linestyle='none', **color_scheme[samp], capsize=1.6, capthick=0.7, linewidth=1.0)
         markers.append(marker[0])
+
+        lines.append(line[0])
         
     pointsg20 = ax.plot(ptvals, addc['g20q80'], label='DY at 200 GeV', markersize=0, linewidth=1.2, **color_scheme["DY200"])
-    for flav in ['g', 'ud', 'b', 'c', 's']:
-        lab = leggend_dict[flav]
-        ax.plot(ptvals, addc[f'{flav}100'], label=lab, markersize=0, linewidth=1.2, **color_scheme[flav])
-#         ax.plot(ptvals, addc['q100'], label='Quarks', markersize=0, linewidth=1.2)
-#         ax.plot(ptvals, addc['b100'], label='Bottom', markersize=0, linewidth=1.2)
+    for flav in flavors:
+        linestyle = '-.' if 'bar' in flav else '-'
+        if combine_antiflavour:
+            lab = legend_dict[flav]
+        else:
+            lab = legend_dict_short[flav]
+        ax.plot(ptvals, addc[f'{flav}100'], label=lab, markersize=0, linewidth=1.2, linestyle=linestyle, **color_scheme[flav])
 
     vlinecoord = 1 if divideHerPy else 0
     ax.hlines(vlinecoord ,1, 10000,color="gray",
@@ -493,7 +565,7 @@ def plot_HerPydiff(ptvals, HerPy_differences, additional_uncertainty_curves, div
         os.mkdir(figdir)
     pltstr2 = pltstr2.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '')
     add_name = '/Herwig_Pythia_ratio' if divideHerPy else '/Herwig_Pythia_difference'
-    fig_name = figdir+add_name+'_'+pltstr2+jeteta_bins.idx2str(etaidx)
+    fig_name = figdir+add_name+pltstr2+'_'+jeteta_bins.idx2str(etaidx)
     print("Saving plot with the name = ", fig_name+".pdf / .png")
     plt.savefig(fig_name+'.pdf');
     plt.savefig(fig_name+'.png');
@@ -564,7 +636,7 @@ def plot_all_flavor_comparison(num_sample_name,
 #     assert False
     for yval, std, flav in zip(ratios, ratio_unc, flavors):
         ax.errorbar(xvals, yval, yerr=std,
-                    linestyle="none", label=leggend_dict[flav], **color_scheme[flav],
+                    linestyle="none", label=legend_dict[flav], **color_scheme[flav],
                     capsize=1.6, capthick=0.7, linewidth=1.0)
 #         assert not lab == 'unmatched'
        

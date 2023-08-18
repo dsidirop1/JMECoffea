@@ -84,7 +84,7 @@ def main():
     ### Or manually by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'Herwig-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
+    data_tag = 'DY-MG-Py' # 'QCD-MG-Her' #'Herwig-TTBAR' 
     # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
     add_tag = '_iso_cut' #'_3rd_jet' # _cutpromtreco _Aut18binning   
@@ -247,7 +247,7 @@ def main():
     
     seed = 1234577890
     prng = RandomState(seed)
-    chunksize = 1000
+    chunksize = 7000
     # maxchunks = 100
     
     if not load_preexisting:

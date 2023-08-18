@@ -311,17 +311,25 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
     return [p, cov, chi2, Ndof, if_failed, [xfit_l, xfit_h]]
 
 
-barable_samples = ['b', 'c', 's', 'u', 'd']
+barable_flavors = ['b', 'c', 's', 'u', 'd', 'ud', 'q']
 
-composite_sample_dict = {
+composite_flavor_dict = {
     'q': ['u', 'd', 's'],
     'ud': ['u', 'd'],
     'qbar': ['ubar', 'dbar', 'sbar'],
     'udbar': ['ubar', 'dbar'],
 }
 
+def get_flavor_antiflavor_list(flavors):
+    flavors_new = []
+    for flav in flavors:
+        if flav in barable_flavors:
+            flavors_new.append(flav)
+            flavors_new.append(flav+'bar')
+    return flavors_new
+
 def add_flavors(output, flavor='all', combine_antiflavour=True ):
-    ''' Sum the response and pt histograms in `output` according to the schema in `composite_sample_dict`.
+    ''' Sum the response and pt histograms in `output` according to the schema in `composite_flavor_dict`.
     Return the summed up histograms `response_hist`, `recopt_hist`.
     '''
     all_samples = [key[11:] for key in output.keys() if 'ptresponse_' in key]
@@ -336,11 +344,11 @@ def add_flavors(output, flavor='all', combine_antiflavour=True ):
         combine_samples = [flavor for flavor in all_samples ]
     else:
         try:
-            combine_samples = composite_sample_dict[flavor]
+            combine_samples = composite_flavor_dict[flavor]
         except KeyError:
             combine_samples = [flavor]
         if combine_antiflavour:
-            combine_samples_bar = [flavor+'bar' for flavor in combine_samples if flavor in barable_samples]
+            combine_samples_bar = [flavor+'bar' for flavor in combine_samples if flavor in barable_flavors]
             combine_samples = combine_samples_bar + combine_samples
 
     all_responses = {flavor:output['ptresponse_'+flavor] for flavor in combine_samples}

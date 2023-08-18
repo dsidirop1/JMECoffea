@@ -6,7 +6,7 @@ from coffea import util
 from cycler import cycler
 import os
 import mplhep as hep
-from helpers import legend_labels
+from fileNames.available_datasets import legend_labels
     
 from common_binning import JERC_Constants
 from JetEtaBins import JetEtaBins, PtBins

@@ -17,10 +17,10 @@ processor_config = {
         "NjetsDY":  2,
     },
     "select_Nth_jet":{
-        "apply":True,
+        "apply":False,
         "N": 2,
     },
-    "jet_iso_cut":{"apply":False},
+    "jet_iso_cut":{"apply":True},
     ### Choose the jet flavour. Some samples have missing `partonFlavour`, so one has to redo the flavour matching oneself. Two different option were implemented:
     ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
     ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
