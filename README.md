@@ -11,8 +11,8 @@ The main structure of the code:
 
 
 ## Set-up
-Several set-ups option exist depending on if you are running on lxplus, lpc or coffea casa. Running on any [lxpus](#lxplus) or [lpc](#lpc) using singularity is possible but not stated here.
-### Set up coffea on the **lxplus** with the lcg nightlies environment and dask on HTCondor: {#lxplus}
+Several set-ups option exist depending on if you are running on [lxplus](#set-up-coffea-on-the-lxplus-with-the-lcg-nightlies-environment-and-dask-on-htcondor), [lpc](#instructions-for-the-lpc-and-singularity) or [coffea casa](#instructions-for-coffea-casa). Running on any lxpus or lpc using singularity is possible but not stated here.
+### Set up coffea on the **lxplus** with the lcg nightlies environment and dask on HTCondor:
 
 Load the `lcg` environment with the relevant packages including `coffea`
 ```
@@ -24,7 +24,7 @@ https://github.com/cernops/dask-lxplus
 git clone git@github.com:cernops/dask-lxplus.git
 ```
 
-### Instructions for the **LPC** (and singularity) {#lpc}
+### Instructions for the **LPC** (and singularity)
 
 1. Clone the repository
 2. Inside the JMECoffea directory:
