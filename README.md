@@ -1,9 +1,10 @@
 # JMECoffea
 
-This code contains a columnar-based calculations of MC jet energy corrections (JEC), following the perscriptions of arxiv:1607.03663. At the moment, the code is adapted for the calculation of L5 flavor JEC and L2/L3 correction part is old.
+This code contains a columnar-based calculations of MC jet energy corrections (JEC) and flavor uncertainties, following the perscriptions of arxiv:1607.03663. At the moment, the code (L5_flavour_dep_corr branch) is adapted for the calculation of L5 flavor JEC and L2/L3 correction part is not tested.
 
 The main structure of the code:
-- `run_processor_response_fitter.py`/ `run_processor_response_fitter.ipynb` creates the histograms of jet responses (saves the results in .coffea files) and fits the response distributions (results in .txt files).
+- `run_processor.py` 
+   creates the histograms of jet responses (saves the results in .coffea files) and fits the response distributions (results in .txt files).
 - `correction_fitter.ipynb` reads the response fit results, fits them vs the reco pt and stores JEC as `.txt` files
 - `flavor_fractions_and_uncertainties.ipynb` reads the response histograms, response fits and the flavor corrections and produces flavor uncertainties and relevent plots. Also, it produces the plots of the fractions of each jet flavor in bins of jet pt.
 - `plotters/Plotting_comparison.ipynb` allows to plot different responses and corrections vs pt or jet_eta.
