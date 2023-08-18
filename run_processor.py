@@ -2,13 +2,17 @@
     # coding: utf-8
 ### run_processor.py
 
-# The file is a wrapper for running coffea processor defined under `processor_name` over jobs with NanoAOD files with working futures, dask and condor settings. 
-# The default processor `CoffeaJERCProcessor_L5.py`, the histograms of jet reponses and reco jet $p_T$. Stores the result in outname='out/CoffeaJERCOutputs'tag_Lx+'_'+data_tag+add_tag'.coffea' for the default processor or in 'out/'+processor_name+tag_full+'.coffea' for the other processors.
+# The file is a wrapper for running a coffea processor defined under `processor_name`.
+# The jobs can be run using iterative (futures) executors or parralel (dask) executors either on condor (on lxplus) or Coffea Casa. See, under `Parameters of the run and switches`.
+# The default processor is `CoffeaJERCProcessor_L5.py`. It creates histograms of jet reponses and reco jet $p_T$.
+# The results are stored outname='out/CoffeaJERCOutputs'tag_Lx+'_'+data_tag+add_tag'.coffea' for the default processor or in 'out/'+processor_name+tag_full+'.coffea' for the other processors.
 # 
-# Options for running on condor, coffea Case using dask are available. See, under `Parameters of the run and switches`.
-# 
-# At the moment, since dask+condor can still sometimes be unstable, for producing the flavor uncertatinties, where one needs to obtain the results from neccessary 6 datasets neccessary, the script has to be run once for each of them (QCD stiching is done automatically). However, this can and should be united in the future.
-# The available datasets are listed in `fileNames/available_datasets.py`. The dataset for the run can be chosen with a corresponding `data_tag` or by providing a path to the .txt file with the file names (without the redirectors) in `dataset`. For small local testing dataset can be also specified as a list of files in `fileslist`.
+# At the moment, since dask+condor can still sometimes be unstable, for producing the flavor uncertatinties, where one needs to obtain the results from neccessary 6 datasets neccessary,
+# the script has to be run once for each of them (QCD stiching is done automatically).
+# However, this can and should be united in the future.
+# The jobs are to be run over files in the NanoAOD. Some predefined datasets are listed in `fileNames/available_datasets.py`. 
+# The dataset for the run can be chosen with a corresponding `data_tag` or by providing a path to the .txt file with the file names (without the redirectors) in `dataset`.
+# For small local testing dataset can be also specified as a list of files in `fileslist`.
 
 # # Dask Setup:
 # ---
@@ -38,14 +42,17 @@
 # ### Imports 
 #### Import updated coffea and awkward versions    
 import sys
+import os
 coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
+if not os.path.exists("out"):
+    raise ValueError(f"The path to the coffea installation does not exist. Please supply the correct path or comment out this line if using the environment path. The provided path is: {coffea_path}.")
 if coffea_path not in sys.path:
     sys.path.insert(0,coffea_path)
 
-ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
+# ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
 
-if ak_path not in sys.path:
-    sys.path.insert(0,ak_path)
+# if ak_path not in sys.path:
+#     sys.path.insert(0,ak_path)
 
 import time
 from coffea import processor, util
@@ -53,7 +60,6 @@ from coffea.nanoevents import NanoAODSchema, BaseSchema
 
 from numpy.random import RandomState
 import importlib
-import os
 from fileNames.available_datasets import dataset_dictionary
 from helpers import get_xsecs_filelist_from_file
 
