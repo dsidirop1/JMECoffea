@@ -2,6 +2,39 @@
     # coding: utf-8
 ### run_processor.py
 
+# The file is a wrapper for running coffea processor defined under `processor_name` over jobs with NanoAOD files with working futures, dask and condor settings. 
+# The default processor `CoffeaJERCProcessor_L5.py`, the histograms of jet reponses and reco jet $p_T$. Stores the result in outname='out/CoffeaJERCOutputs'tag_Lx+'_'+data_tag+add_tag'.coffea' for the default processor or in 'out/'+processor_name+tag_full+'.coffea' for the other processors.
+# 
+# Options for running on condor, coffea Case using dask are available. See, under `Parameters of the run and switches`.
+# 
+# At the moment, since dask+condor can still sometimes be unstable, for producing the flavor uncertatinties, where one needs to obtain the results from neccessary 6 datasets neccessary, the script has to be run once for each of them (QCD stiching is done automatically). However, this can and should be united in the future.
+# The available datasets are listed in `fileNames/available_datasets.py`. The dataset for the run can be chosen with a corresponding `data_tag` or by providing a path to the .txt file with the file names (without the redirectors) in `dataset`. For small local testing dataset can be also specified as a list of files in `fileslist`.
+
+# # Dask Setup:
+# ---
+# ### For Dask+Condor setup on lxplus
+# #### 1.) The wrapper needs to be installed following https://github.com/cernops/dask-lxplus
+# #### 2.) Source lcg environment in bash
+# #### `source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh`
+# #### Singularity could work but not confirmed.
+# ---
+# ### For Coffea-Casa, the client must be specified according to the user that is logged into the Coffea-Casa Environment.
+# #### 1.) go to the left of this coffea-casa session to the task bar and click the orange-red button; it will say "Dask" if you hover your cursor over it
+# #### 2.) scroll down to the blue box where it shows the "Scheduler Address"
+# #### 3.) write that full address into the dask Client function 
+# #### Example: `client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")`
+# ---
+# ### For CMSLPC, the client must be specified with the LPCCondorCluster
+# #### 1.) follow installation instructions from https://github.com/CoffeaTeam/lpcjobqueue, if you have not already done so, to get a working singularity environment with access to lpcjobqueue and LPCCondorCluster class
+# #### 2.) import LPCCondorCluster: `from lpcjobqueue import LPCCondorCluster`
+# #### 3.) define the client
+# #### Example: 
+# `cluster = LPCCondorCluster()`
+# 
+# `client = Client(cluster)`
+# 
+
+
 # ### Imports 
 #### Import updated coffea and awkward versions    
 import sys
@@ -26,41 +59,6 @@ from helpers import get_xsecs_filelist_from_file
 
 
 def main():
-    
-    #### The readme has to be rewritten!!!
-
-    # The file is a wrapper for running coffea processor defined under `processor_name` over jobs with NanoAOD files with working futures, dask and condor settings. 
-    # The default processor `CoffeaJERCProcessor_L5.py`, the histograms of jet reponses and reco jet $p_T$. Stores the result in outname='out/CoffeaJERCOutputs'tag_Lx+'_'+data_tag+add_tag'.coffea' for the default processor or in 'out/'+processor_name+tag_full+'.coffea' for the other processors.
-    # 
-    # Options for running on condor, coffea Case using dask are available. See, under `Parameters of the run and switches`.
-    # 
-    # At the moment, since dask+condor can still sometimes be unstable, for producing the flavor uncertatinties, where one needs to obtain the results from neccessary 6 datasets neccessary, the script has to be run once for each of them (QCD stiching is done automatically). However, this can and should be united in the future.
-    # The available datasets are listed in `fileNames/available_datasets.py`. The dataset for the run can be chosen with a corresponding `data_tag` or by providing a path to the .txt file with the file names (without the redirectors) in `dataset`. For small local testing dataset can be also specified as a list of files in `fileslist`.
-    
-    # # Dask Setup:
-    # ---
-    # ### For Dask+Condor setup on lxplus
-    # #### 1.) The wrapper needs to be installed following https://github.com/cernops/dask-lxplus
-    # #### 2.) Source lcg environment in bash
-    # #### `source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh`
-    # #### Singularity could work but not confirmed.
-    # ---
-    # ### For Coffea-Casa, the client must be specified according to the user that is logged into the Coffea-Casa Environment.
-    # #### 1.) go to the left of this coffea-casa session to the task bar and click the orange-red button; it will say "Dask" if you hover your cursor over it
-    # #### 2.) scroll down to the blue box where it shows the "Scheduler Address"
-    # #### 3.) write that full address into the dask Client function 
-    # #### Example: `client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")`
-    # ---
-    # ### For CMSLPC, the client must be specified with the LPCCondorCluster
-    # #### 1.) follow installation instructions from https://github.com/CoffeaTeam/lpcjobqueue, if you have not already done so, to get a working singularity environment with access to lpcjobqueue and LPCCondorCluster class
-    # #### 2.) import LPCCondorCluster: `from lpcjobqueue import LPCCondorCluster`
-    # #### 3.) define the client
-    # #### Example: 
-    # `cluster = LPCCondorCluster()`
-    # 
-    # `client = Client(cluster)`
-    # 
-
     ################ Parameters of the run and switches  #########################
     
     # 'iterative' for local (slow/concurrent) iterative executor; 'dask' for local (parallel) dask executor;
