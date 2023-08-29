@@ -40,20 +40,7 @@
 
 
 # ### Imports 
-#### Import updated coffea and awkward versions    
-import sys
 import os
-coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
-if not os.path.exists("out"):
-    raise ValueError(f"The path to the coffea installation does not exist. Please supply the correct path or comment out this line if using the environment path. The provided path is: {coffea_path}.")
-if coffea_path not in sys.path:
-    sys.path.insert(0,coffea_path)
-
-# ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
-
-# if ak_path not in sys.path:
-#     sys.path.insert(0,ak_path)
-
 import time
 from coffea import processor, util
 from coffea.nanoevents import NanoAODSchema, BaseSchema
@@ -69,9 +56,9 @@ def main():
     
     # 'iterative' for local (slow/concurrent) iterative executor; 'dask' for local (parallel) dask executor;
     # 'condor' for dask on condor; 'coffea-casa' for dask on coffea-casa
-    executor = 'condor' 
+    executor = 'dask' 
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = False   ### True if run only on one file and five chunks to debug processor
+    test_run          = True   ### True if run only on one file and five chunks to debug processor
 
     Nfiles = -1                 ### number of files for each sample; -1 for all files
     
@@ -92,7 +79,7 @@ def main():
     # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
     add_tag = '_iso_cut' #'_3rd_jet' # _cutpromtreco _Aut18binning   
-    run_comment = 'Rerunning the isolation cut run with all the statistics'                          #### Comment for the log file: e.g., why the run is made?
+    run_comment = 'Testing the pion/ antipion response studies.'                          #### Comment for the log file: e.g., why the run is made?
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
 

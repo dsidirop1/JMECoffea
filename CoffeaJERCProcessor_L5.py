@@ -5,7 +5,7 @@ output: a dictionary over datasets of dictionaries over histograms.
 output histograms: ptresponse histogram, pt_reco histogram for each flavor and the cutflow
 ''' 
 
-from memory_profiler import profile
+# from memory_profiler import profile
 from common_binning import JERC_Constants
 from JERCProcessorcuts import jet_iso_cut, leading_jet_and_alpha_cut, jet_pt_cut, good_lepton_cut, select_leptons, recolep_drcut, select_Nth_jet
 
@@ -103,9 +103,9 @@ class Processor(processor.ProcessorABC):
     def accumulator(self):
         return self._accumulator
 
-    @profile    
-    def for_memory_testing(self):
-        a=1
+    # @profile    
+    # def for_memory_testing(self):
+    #     a=1
         
 #     @profile    
     def process(self, events):
