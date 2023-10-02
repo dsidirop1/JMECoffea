@@ -24,15 +24,16 @@ https://github.com/cernops/dask-lxplus
 git clone git@github.com:cernops/dask-lxplus.git
 ```
 
-To get imports of the path work well, install the package in the editable state in a virtual environment. Explanation of this is [here]([url](https://stackoverflow.com/questions/714063/importing-modules-from-parent-folder/50194143#50194143)):
+To get imports of the path work well, install the package in the editable state in a virtual environment. Explanation of this is [here](https://stackoverflow.com/questions/714063/importing-modules-from-parent-folder/50194143#50194143):
 ```
 python -m venv venv
 pip install -e .
 ```
 
-Every time logging in, activate the virtual environment
+Every time logging in, activate the virtual environment and after that load the lcg
 ```
 . venv/bin/activate
+source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh
 ```
 
 
