@@ -15,3 +15,13 @@ The data tag "QCD-MG-Py" found in the dataset_dictionary. The dataset "fileNames
  Outname = out/CoffeaJERCOutputs_L5_QCD-MG-Py_2leadingjets_noiso.coffea
 Config parameters:
 {'good_lepton_cut': {'apply': True}, 'tight_lepton_veto_id': {'apply': True}, 'recolep_drcut': {'apply': True}, 'jet_pt_cut': {'apply': True, 'mingenjetpt': 15}, 'leading_jet_and_alpha_cut': {'apply': True, 'alphaQCD': 1.0, 'alphaDY': 1.0, 'NjetsQCD': 2, 'NjetsDY': 2}, 'select_Nth_jet': {'apply': False, 'N': 2}, 'jet_iso_cut': {'apply': False}, 'jetflavour': 'partonFlavour'}
+Run_index_3
+Run comment: Testing the pion/ antipion response studies.
+Processor CoffeaJERCProcessor_L5 will be run on dask.
+The data tag "DY-MG-Py" found in the dataset_dictionary. The dataset with the path to file names "fileNames/DYJets_MG-Py.txt" will be used. 
+Running on the number of files: 5
+ Job with the full tag _L5_DY-MG-Py_iso_cut
+ Outname = out/CoffeaJERCOutputs_L5_DY-MG-Py_iso_cut.coffea 
+
+Config parameters:
+{'good_lepton_cut': {'apply': True}, 'tight_lepton_veto_id': {'apply': True}, 'recolep_drcut': {'apply': True}, 'jet_pt_cut': {'apply': True, 'mingenjetpt': 15}, 'leading_jet_and_alpha_cut': {'apply': True, 'alphaQCD': 1.0, 'alphaDY': 1.0, 'NjetsQCD': 3, 'NjetsDY': 2}, 'select_Nth_jet': {'apply': False, 'N': 2}, 'jet_iso_cut': {'apply': True}, 'jetflavour': 'partonFlavour', 'use_weights': False}

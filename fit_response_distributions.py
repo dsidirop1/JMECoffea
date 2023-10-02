@@ -47,7 +47,7 @@ def main(data_tag='Pythia-TTBAR'):
     ################ Parameters of the run and switches  #########################
     test_run            = False   ### True if run only on one file and five chuncs to debug processor
     load_fit_res        = False   ### True if only replot the fit results without redoing histogram fits
-    saveplots           = False    ### True if save all the response distributions. There are many eta/pt bins so it takes time and space
+    saveplots           = True    ### True if save all the response distributions. There are many eta/pt bins so it takes time and space
     combine_antiflavour = True    ### True if combine the flavor and anti-flavour jets into one histogram
     
     ### Choose eta binning for the response fits.
@@ -267,6 +267,6 @@ def main(data_tag='Pythia-TTBAR'):
     print("All done. Congrats!")
   
 if __name__ == "__main__":
-    data_tags = ['Pythia-TTBAR', 'Herwig-TTBAR', 'QCD-MG-Py', 'QCD-MG-Her', 'QCD-Py', 'DY-MG-Py', 'DY-MG-Her']
+    data_tags = ['DY-MG-Py']
     for data_tag in data_tags:
         main(data_tag=data_tag)

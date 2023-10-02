@@ -58,9 +58,9 @@ def main():
     # 'condor' for dask on condor; 'coffea-casa' for dask on coffea-casa
     executor = 'dask' 
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = True   ### True if run only on one file and five chunks to debug processor
+    test_run          = False   ### True if run only on one file and five chunks to debug processor
 
-    Nfiles = -1                 ### number of files for each sample; -1 for all files
+    Nfiles = 5                ### number of files for each sample; -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     processor_name = 'CoffeaJERCProcessor'+tag_Lx
@@ -283,7 +283,8 @@ def main():
     #### Attempt to prevent the error when the cluster closes. Doesn't always work.
     if executor=='condor' or executor=='coffea-casa' or executor=='dask':
         client.close()
-        time.sleep(5)
+        time.sleep(5)       
+    if executor=='condor':		
         cluster.close()
     
     from helpers import find_result_file_index
@@ -302,3 +303,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
