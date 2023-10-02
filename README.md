@@ -24,6 +24,34 @@ https://github.com/cernops/dask-lxplus
 git clone git@github.com:cernops/dask-lxplus.git
 ```
 
+To get imports of the path work well, install the package in the editable state in a virtual environment. Explanation of this is here: https://stackoverflow.com/questions/714063/importing-modules-from-parent-folder/50194143#50194143:
+```
+python -m venv venv
+pip install -e .
+```
+
+Every time logging in, activate the virtual environment and after that load the lcg
+```
+. venv/bin/activate
+source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh
+```
+
+
+**Note** Unfortunatelly, lcg104 and nightlies that have the newest coffea (0.7.21) have a bug with dask. It does not allow running the jobs on the condor cluster. To make it work one needs to use the lch103 environment and install coffea 2.2.21 locally manually and put the path to the coffea by hand on top of the lcg environment path.
+Load the lcg environment.
+```
+. /cvmfs/sft.cern.ch/lcg/views/LCG_103/x86_64-centos7-gcc11-opt/setup.sh
+```
+
+Install coffea locally, choose path under `target`.
+```
+pip install --target=. coffea
+```
+One might need to delete some dependancies that are installed but not needed.
+
+
+
+
 ### Instructions for the **LPC** (and singularity)
 
 1. Clone the repository
