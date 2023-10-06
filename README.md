@@ -77,7 +77,7 @@ e.g
 ```
 ssh -L 8099:localhost:8095 <username>@lxplus.cern.ch
 source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh
-jupyter notebook --no-browser --port=8099
+jupyter notebook --no-browser --port=8095
 ```
 Then copy the link in the output and connect in to your broswer, replacing the remote_port valur with local_port. Here you are mapping the port local_port (e.g 8099) of the localhost (your machine) to the port remote_port (e.g. 8095) of the remote server (lxplus.cern.ch). We assume that the two ports are free and therefore available.
 
