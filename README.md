@@ -45,7 +45,7 @@ Load the lcg environment.
 
 Install coffea locally, choose path under `target`.
 ```
-pip install --target=. coffea
+pip install --no-deps --target=. coffea
 ```
 One might need to delete some dependancies that are installed but not needed.
 
