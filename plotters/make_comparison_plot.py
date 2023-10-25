@@ -93,10 +93,8 @@ def make_comparison_plot(data_dict,
     xspline = linspacefun(np.min(xvals[0,validx_all]),  np.max(xvals[0,validx_all]), 100)
     xlog10_spline = np.log10(xspline)
 
-    if plotvspt:
-        wd = np.abs(ptbins.edges[start+1:end+1] - ptbins.edges[start:end]) #bin_widths
-    else:
-        wd = np.abs(etabins.edges[start+1:end+1] - etabins.edges[start:end]) #bin_widths
+    bins2 = ptbins if plotvspt else etabins
+    wd = np.abs(np.diff(bins2.edges))[start:end] #bin_widths
 
     if inverse==True:
         yvals = 1/yvals
@@ -229,7 +227,7 @@ def make_comparison_plot(data_dict,
         norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         left_lim = np.min((y_norm-yerr_norm)[norm_pos])
         right_lim = np.max((yerr_norm+y_norm)[norm_pos])
-        lim_pad = (right_lim - left_lim)/1.5
+        lim_pad = (right_lim - left_lim)/2.5
         ax.set_ylim(left_lim-lim_pad/10, right_lim+lim_pad)
 
         ### Recalculate the limits for the ratio plot
@@ -286,7 +284,7 @@ def make_comparison_plot(data_dict,
     fig_x_str = 'pt' if plotvspt else 'eta'
     run_name =  f'{fig_corr_name}_vs_{fig_x_str}_L5_'+'-'.join(keys)+'-'.join(function_dict.keys())
     run_name = (run_name.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
-                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '').replace('\n', '')
+                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '').replace('\n', '').replace('$', '').replace('\\', '')
     )
     dir_name1 = f'fig/{fig_corr_name}_vs_{fig_x_str}_comparisons/'
     dir_name2 = dir_name1+run_name
@@ -297,7 +295,8 @@ def make_comparison_plot(data_dict,
         os.mkdir(dir_name2)
         print("Creating directory ", dir_name2)
 
-    hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
     hep.label.exp_text(text=f'{bins.idx2plot_str(binidx)}\n{flav} jets', loc=2, ax=ax)
     fig_name = dir_name2+'/'+run_name+"_"+flav+'_'+eta_string
     print("Saving plot for eta = ", eta_string)
@@ -312,7 +311,7 @@ def read_data(mean_name, flav, tag1):
     return read_data_orig(mean_name, flav, tag1, '../')
 
 ### Some recent file to get out the binning
-outname = '../out/CoffeaJERCOutputs_L5_DY-MG-Py.coffea'
+outname = '../out/CoffeaJERCOutputs_L5_QCD-Py.coffea'
 output = util.load(outname)
 ptbins = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].edges
 ptbins_c = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].centers

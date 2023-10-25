@@ -15,12 +15,14 @@ color_scheme_antiflav = {key: cycler_vals
 color_scheme = color_scheme | color_scheme_antiflav
 
 legend_dict = {'g': 'Gluons', 'q': 'Quarks', 'ud':'UpDown', 'b': 'Bottom', 'c': 'Charm', 's': 'Strange', 'unmatched': 'Unmatched'}
+from fileNames.available_datasets import legend_labels
 legend_dict_short = {'g': 'g',
                      'ud': 'ud', 'q':'q', 'b': 'b', 'c': 'c', 's':'s',
                      'unmatched': 'unmatched',
-                     'udbar': '$\overline{ud}$', 'qbar':'$\overline{q}$', 'bbar': '$\overline{b}$', 'cbar': '$\overline{c}$', 'sbar':'$\overline{s}$'}
+                     'udbar': '$\overline{ud}$', 'qbar':'$\overline{q}$', 'bbar': '$\overline{b}$', 'cbar': '$\overline{c}$', 'sbar':'$\overline{s}$',
+                     'QCD': legend_labels["QCD"]["lab"], 'TTBAR': legend_labels["ttbar"]["lab"], 'DY': legend_labels["DY"]["lab"] }
 
-def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, saveplot=False):
+def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, legenddict=None, saveplot=False):
     samples = list(sampledict.keys())
     ptbins_c = ptbins.centres
 
@@ -75,8 +77,9 @@ def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, saveplot=False):
     ax.set_xticks([10, 20, 50, 100, 200, 500, 1000, 2000, 5000])
     ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
     # ax.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    legend1 = ax.legend(points_ls, [samples[0], samples[1]], loc="upper left", bbox_to_anchor=(0.48, 1))
-    leg2 = ax.legend(ncol=1, loc='upper right', bbox_to_anchor=(0.52, 1))
+    legend_labs = [legenddict[samples[0]], legenddict[samples[1]] ] if legenddict is not None else [samples[0], samples[1]]
+    legend1 = ax.legend(points_ls, legend_labs, loc="upper left", bbox_to_anchor=(0.56, 1))
+    leg2 = ax.legend(ncol=1, loc='upper left', bbox_to_anchor=(0.42, 1))
     ax.add_artist(legend1)
     # ax.add_artist(leg2)
 
@@ -86,9 +89,9 @@ def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, saveplot=False):
 
     # ax.yaxis.get_ticklocs(minor=True)
     ax.minorticks_on()
-#     hep.cms.label("Something", data=False, year=2018, fontsize=15.6/1.25)
-#     hep.cms.label(data=False, fontsize=15.6/1.25, loc=3)
-    hep.label.exp_text(text=jeteta_bins.idx2plot_str(etaidx), loc=0)
+    hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax, rlabel='')
+    hep.label.exp_text(text=jeteta_bins.idx2plot_str(etaidx), loc=2)
 
     if saveplot:
         if not os.path.exists("fig/fractions"):
@@ -281,7 +284,7 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
     #### Plot the points
     for yval, std, samp in zip(ratios, ratio_unc, sample_lab):
         ax.errorbar(xvals, yval, yerr=std,
-                    linestyle="none", label=samp, **color_scheme2[samp],
+                    linestyle="none", label=legend_dict_short[samp], **color_scheme2[samp],
                     capsize=1.6, capthick=0.7, linewidth=1.0)
        
     #### Plot pre-fitted curves
@@ -303,7 +306,7 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
             yvals_cont_d = 1/yvals_cont_d
 
         ratios_cont = get_ratio(yvals_cont, yvals_cont_d, divide)
-        ax.plot(xvals_cont, ratios_cont, markersize=0, **color_scheme[lab], label=lab+' fit')
+        ax.plot(xvals_cont, ratios_cont, markersize=0, **color_scheme[lab], label=legend_dict_short[lab]+' fit')
 
     if plotsimfit:
         yvals_cont_simfit = evaluator[f'{correction_txt}_simfit_Her{eta_binning_str}_{flav}J'](np.array([etaval]),xvals_cont)
@@ -346,7 +349,7 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
     poly4fun = lambda x, p: poly4lims(x, xfitmin, xfitmax, *p)
     y_poly4 = poly4fun(xvals_cont, p_poly4)
     # y_poly4_now = poly4fun(xvals_cont, p_poly4_1)
-    ax.plot(xvals_cont, y_poly4, label=r'Poly, n=4' ,linewidth=2.0, markersize=0);
+    # ax.plot(xvals_cont, y_poly4, label=r'Poly, n=4' ,linewidth=2.0, markersize=0);
     ####################### End fit ####################
 
     ####################### Calculate resonable limits excluding the few points with insane errors
@@ -374,11 +377,13 @@ def plot_ratio_comparisons_samples(flav, etaidx, jeteta_bins, ptbins_c, eta_binn
     
     ax.set_xticks([10, 20, 50, 100, 500, 1000, 5000])
     ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    leg1 = ax.legend(ncol=1)
+    # hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    hep.cms.label("Preliminary", loc=0, data=False, ax=ax, rlabel='')
+    hep.label.exp_text(text=jeteta_bins.idx2plot_str(etaidx)+f'\n{flav} jets', loc=2)
+
+    leg1 = ax.legend(ncol=1, loc='upper right', bbox_to_anchor=(0.92, 1))
     ax.set_xlim(xlims)
-    
-    hep.label.exp_text(text=jeteta_bins.idx2plot_str(etaidx)+f', {flav} jets', loc=0)
-    
+        
     figdir = "fig/uncertainty"
     if not os.path.exists(figdir):
         os.mkdir(figdir)
@@ -413,8 +418,8 @@ def plot_uncertainty_antiflav(ptvals, etavals, HerPy_differences, additional_unc
     ax.hlines(0, ax.get_xlim()[0], ax.get_xlim()[1],color="gray",
         linewidth=1, alpha=0.4)
 
-    legend1 = ax.legend(handles=antiflav_labs, loc='upper right', bbox_to_anchor=(0.52, 1), handlelength=1.5, title='antiflavor', title_fontsize=10)
-    leg2 = ax.legend(handles=flav_labs, ncol=1, loc='upper left', bbox_to_anchor=(0.47, 1), handlelength=0.9, title='flavor' , title_fontsize=10)#, title='assembled\nfrom QCD', title_fontsize=10)
+    legend1 = ax.legend(handles=antiflav_labs, loc='upper right', bbox_to_anchor=(0.72, 1), handlelength=1.5, title='antiflavor', title_fontsize=10)
+    leg2 = ax.legend(handles=flav_labs, ncol=1, loc='upper left', bbox_to_anchor=(0.67, 1), handlelength=0.9, title='flavor' , title_fontsize=10)#, title='assembled\nfrom QCD', title_fontsize=10)
     ax.add_artist(legend1)
     xlabel = r'$p_{T}$ (GeV)' if plotvspt else r'$\eta$'
     ax.set_xlabel(xlabel);
@@ -432,7 +437,9 @@ def plot_uncertainty_antiflav(ptvals, etavals, HerPy_differences, additional_unc
     ax.set_ylim(ylim_old[0],ylim_old[1]+ylim_pad)
     labtxt = f'{ptoretastr}' #if plotvspt else f'{ptoretastr}'
 #     labtxt = f'$\eta$ = {etabins_abs[ptoretaidx]}' if plotvspt else f'$p_T$ = {ptbins_c[ptoretaidx]} GeV'
-    hep.label.exp_text(text=labtxt, loc=0)
+    # hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    hep.cms.label("Preliminary", loc=0, data=False, ax=ax, rlabel='')
+    hep.label.exp_text(text=labtxt, loc=2)
     figdir = "fig/uncertainty"
     if not os.path.exists(figdir):
         os.mkdir(figdir)
@@ -441,7 +448,7 @@ def plot_uncertainty_antiflav(ptvals, etavals, HerPy_differences, additional_unc
         fig_name = figdir+f"/JECuncertainty_vs_pt_eta_{ptoretastr}".replace('.','')
     else:
         fig_name = figdir+f"/JECuncertainty_vs_pt_pt_{ptoretastr}".replace('.','_')
-    fig_name = fig_name.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '')
+    fig_name = fig_name.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '').replace('\n', '_')
     print("Saving plot with the name = ", fig_name+".pdf / .png")
     plt.savefig(fig_name+'.pdf');
     plt.savefig(fig_name+'.png');
@@ -460,8 +467,8 @@ def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_
                 linewidth=1.2, **color_scheme[samp])
         old_uncs.append(old_unc[0])
 
-    for flav in ['g', 'q', 'b', 'c']:
-        color = color_scheme[flav] if flav!='q' else color_scheme['ud']
+    for flav in ['g', 'c', 'b', 'q']:
+        color = color_scheme[flav] #if flav!='q' else color_scheme['ud']
         old_unc = ax.plot(xvals, (uncertainties[flav](etavals, ptvals)[:,0]-1)*100, '-.', markersize=0, linewidth=1.0,
                 **color, alpha=0.6)
         old_uncs.append(old_unc[0])
@@ -474,8 +481,8 @@ def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_
     ax.hlines(0, ax.get_xlim()[0], ax.get_xlim()[1],color="gray",
         linewidth=1, alpha=0.4)
 
-    legend1 = ax.legend(old_uncs, ['']*len(old_uncs), loc='upper right', bbox_to_anchor=(0.52, 1), handlelength=1.5, title='Run 1', title_fontsize=10)
-    leg2 = ax.legend(ncol=1, loc='upper left', bbox_to_anchor=(0.47, 1), handlelength=0.9, title='Run 2' , title_fontsize=10)#, title='assembled\nfrom QCD', title_fontsize=10)
+    legend1 = ax.legend(old_uncs, ['']*len(old_uncs), loc='upper right', bbox_to_anchor=(0.72, 1), handlelength=1.5, title='Run 1', title_fontsize=10)
+    leg2 = ax.legend(ncol=1, loc='upper left', bbox_to_anchor=(0.67, 1), handlelength=0.9, title='Run 2' , title_fontsize=10)#, title='assembled\nfrom QCD', title_fontsize=10)
     ax.add_artist(legend1)
     xlabel = r'$p_{T}$ (GeV)' if plotvspt else r'$\eta$'
     ax.set_xlabel(xlabel);
@@ -493,7 +500,9 @@ def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_
     ax.set_ylim(ylim_old[0],ylim_old[1]+ylim_pad)
     labtxt = f'{ptoretastr}' #if plotvspt else f'{ptoretastr}'
 #     labtxt = f'$\eta$ = {etabins_abs[ptoretaidx]}' if plotvspt else f'$p_T$ = {ptbins_c[ptoretaidx]} GeV'
-    hep.label.exp_text(text=labtxt, loc=0)
+    hep.label.exp_text(text=labtxt, loc=2)
+    # hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    hep.cms.label("Preliminary", loc=0, data=False, ax=ax, rlabel='')
     figdir = "fig/uncertainty"
     if not os.path.exists(figdir):
         os.mkdir(figdir)
@@ -502,7 +511,7 @@ def plot_uncertainty(ptvals, etavals, HerPy_differences, additional_uncertainty_
         fig_name = figdir+f"/JECuncertainty_vs_pt_eta_{ptoretastr}".replace('.','')
     else:
         fig_name = figdir+f"/JECuncertainty_vs_pt_pt_{ptoretastr}".replace('.','_')
-    fig_name = fig_name.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '')
+    fig_name = fig_name.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '').replace('\n', '_')
     print("Saving plot with the name = ", fig_name+".pdf / .png")
     plt.savefig(fig_name+'.pdf');
     plt.savefig(fig_name+'.png');
@@ -540,14 +549,14 @@ def plot_HerPydiff(ptvals, HerPy_differences, additional_uncertainty_curves, div
         linewidth=1, alpha=0.9)
 
     leg1_handles = [(ai,bi) for ai, bi, in zip(lines,markers)]
-    legend1 = ax.legend(leg1_handles, ['QCD', 'DY', 'TTBAR'], loc="upper right", bbox_to_anchor=(0.52, 1), handlelength=1.5) # seg.len=5) #, title='correction', title_fontsize=10)
+    legend1 = ax.legend(leg1_handles, [legend_dict_short['QCD'], legend_dict_short['DY'], legend_dict_short['TTBAR']], loc="upper right", bbox_to_anchor=(0.52, 1), handlelength=1.5) # seg.len=5) #, title='correction', title_fontsize=10)
 #     assert False
     leg2 = ax.legend(ncol=1, loc='upper left', bbox_to_anchor=(0.48, 1))#, title='assembled\nfrom QCD', title_fontsize=10)
     ax.add_artist(legend1)
     xlabel = r'$p_{T}$ (GeV)'
     ax.set_xlabel(xlabel);
     ylab_pre = 'Her7/Py8' if divideHerPy else 'Her7-Py8'
-    ylabel = r' (correction)'
+    ylabel = r' (median response)'
     ax.set_ylabel(ylab_pre+ylabel);
     ax.set_xscale('log')
     ax.set_xticks([10, 20, 50, 100, 500, 1000, 5000])
@@ -563,7 +572,7 @@ def plot_HerPydiff(ptvals, HerPy_differences, additional_uncertainty_curves, div
     figdir = "fig/uncertainty"
     if not os.path.exists(figdir):
         os.mkdir(figdir)
-    pltstr2 = pltstr2.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '')
+    pltstr2 = pltstr2.replace(', ', '_').replace(' ', '_').replace('$', '').replace('=', '_').replace('\eta', 'eta').replace('|', '').replace('<', '').replace('\n', '_')
     add_name = '/Herwig_Pythia_ratio' if divideHerPy else '/Herwig_Pythia_difference'
     fig_name = figdir+add_name+pltstr2+'_'+jeteta_bins.idx2str(etaidx)
     print("Saving plot with the name = ", fig_name+".pdf / .png")

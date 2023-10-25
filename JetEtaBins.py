@@ -4,6 +4,13 @@ from dataclasses import dataclass, field
 from collections.abc import Iterable
 import numpy as np
 
+def round_for_str(val, precision):
+    if precision>0:
+        return np.round(val,precision)
+    else:
+        return int(np.round(val,precision))
+
+
 @dataclass()
 class JetBins():
     bin_type: str
@@ -25,13 +32,13 @@ class JetBins():
             dimension = ' '+dimension
         if isinstance(idx, Iterable):
             idx = idx[0]
-        outstr = f'${np.round(self.edges[idx],precision)}<{var_name}<{np.round(self.edges[idx+1],precision)}${dimension}'
+        outstr = f'${round_for_str(self.edges[idx],precision)}<{var_name}<{round_for_str(self.edges[idx+1],precision)}${dimension}'
         return outstr
 
     def idx2str(self, idx, precision=3, var_name='eta'):
         if isinstance(idx, Iterable):
             idx = idx[0]
-        outstr = f'{var_name}{np.round(self.edges[idx],precision)}to{np.round(self.edges[idx+1],precision)}'
+        outstr = f'{var_name}{round_for_str(self.edges[idx],precision)}to{round_for_str(self.edges[idx+1],precision)}'
         if precision>0:
             outstr = outstr.replace('.','p')
         else:

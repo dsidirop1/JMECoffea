@@ -39,15 +39,22 @@ def save_correction_txt_file(txtfile_outname, fit_res_all_tags):
 from scipy.optimize import brentq
 # scipy.optimize.brentq
 
-def find_stationary_pnt_poly4(xmin, xmax, *p):
-    '''Finds the last x within the limits [xmin, xmax], where the derivative of the 4-th order polynomial with
-    coefficients p, changes sign. If there is no such point in outputs xmax.  '''
-    c0, c1, c2, c3, c4 = p
+def find_stationary_pnt_poly(xmin, xmax, *p, degree=4):
+    '''Finds the last x within the limits [xmin, xmax], where the derivative of the n-th order polynomial with
+    coefficients p, changes sign. n is allowed to be 4 or 3 at the moment. If there is no such point in outputs xmax.  '''
+    if degree not in [3,4]:
+        raise ValueError(f"Degree can be either 3 or 4. The value given is {degree}")
+    if degree==3:
+        c0, c1, c2, c3 = p
+    elif degree==4:
+        c0, c1, c2, c3, c4 = p
     xmin = np.log10(xmin)
     xmax = np.log10(xmax)
-    xs = np.linspace(xmin, xmax,1000)
-    
-    deriv = lambda xs: c1+2*c2*xs+c3*3*xs**2+4*c4*xs**3
+    xs = np.linspace(xmin, xmax, 1000)
+    if degree==3:
+        deriv = lambda xs: c1+2*c2*xs+c3*3*xs**2
+    elif degree==4:
+        deriv = lambda xs: c1+2*c2*xs+c3*3*xs**2+4*c4*xs**3
     signx = np.sign(deriv(xs))
     changes_sign = signx[1:]*signx[:-1]
     last_change_idx = np.where(changes_sign==-1)[0]
@@ -57,7 +64,6 @@ def find_stationary_pnt_poly4(xmin, xmax, *p):
     else:
         last_change_idx = last_change_idx[-1]
         root = brentq(deriv, xs[last_change_idx], xs[last_change_idx+1] )
-    print(last_change_idx)
     
     return 10**root
 
@@ -204,7 +210,7 @@ def fit_corrections(etaidx, data_dict, flav, data_tags,
         if max_ptval==None:
             max_ptval=5000
         else:
-            raise ValueError("Remove `max_ptval` if using `maxlimit_static_pnt`. `max_ptval` given as {max_ptval} but `maxlimit_static_pnt` is set to {maxlimit_static_pnt}.")
+            raise ValueError(f"Remove `max_ptval` if using `maxlimit_static_pnt`. `max_ptval` given as {max_ptval} but `maxlimit_static_pnt` is set to {maxlimit_static_pnt}.")
     elif max_ptval==None:
         max_ptval=500
 
@@ -240,15 +246,14 @@ def fit_corrections(etaidx, data_dict, flav, data_tags,
                               [1,0,0,0,0] ])
         print("No points to fit. Returning a unity function.")
         return fit_res_new
-    
-    fit_min_lim = np.nanmin(xvals)
-    fit_max_lim = np.nanmax(xvals)
 
     means2fit = yvals[validpt_mask]
     means_unc2fit = np.abs(stds[validpt_mask])
     ptbins2fit = xvals[validpt_mask]
+    fit_min_lim = np.min(ptbins2fit)
+    fit_max_lim = np.max(ptbins2fit)
 
-    xplot = np.linspace(ptbins2fit.min(), ptbins2fit.max(),1000)
+    xplot = np.linspace(fit_min_lim, fit_max_lim, 1000)
 
     ###################### Fits ######################
     
@@ -269,24 +274,33 @@ def fit_corrections(etaidx, data_dict, flav, data_tags,
             print(f"Too little points for {fit} fit")
             p, p_err = [[np.nan]*fits2plot[fit][2]]*2
         fitres[fit] = p_err
-
-
-    if maxlimit_static_pnt:
-        fit_max_lim_new = find_stationary_pnt_poly4(fit_min_lim, fit_max_lim, *fitres[main_fit])
-    else:
-        fit_max_lim_new = fit_max_lim
     
     chi2s = {fit: np.sum((fits2plot[fit][0](ptbins2fit, *fitres[fit]) - means2fit)**2/means_unc2fit**2)
                  for fit in fits2plot}
     Ndofs = {fit: len(ptbins2fit) - fits2plot[fit][2] for fit in fits2plot}
-    
-    fit_max_lim_idx = np.searchsorted(xplot,fit_max_lim_new)
 
     ## if chi2 of n=3 polynomial outside the 2 one-sided std of the chi2 distribution, use n=3 polynomial.
     if main_fit == "Poly, n=4" and "Poly, n=3" in fits2plot and chi2.ppf(1-0.158, Ndofs["Poly, n=3"])>chi2s["Poly, n=3"]:
         main_fit == "Poly, n=3"
     
     print(f"Using the {main_fit} fit results ")
+    if maxlimit_static_pnt:
+        if main_fit=="Poly, n=3":
+            fit_degree = 3 
+        elif main_fit=="Poly, n=4":
+            fit_degree = 4
+        else:
+            ValueError(f"Main fit is {main_fit} but the derivative for the static point is not defined for this fit.")
+        fit_max_lim_new = find_stationary_pnt_poly(fit_min_lim, fit_max_lim, *fitres[main_fit], degree=fit_degree)
+    else:
+        fit_max_lim_new = fit_max_lim
+    fit_max_lim_idx = np.searchsorted(np.sort(ptbins2fit), fit_max_lim_new)
+    if maxlimit_static_pnt & (fit_max_lim_idx==len(ptbins2fit)) | (fit_max_lim_idx<=len(ptbins2fit)-6):
+        # static point is too low or the last point that usually fluctuates out
+        fit_max_lim_idx = len(ptbins2fit)-3
+        fit_max_lim_new = np.sort(ptbins2fit)[fit_max_lim_idx]
+    xplot_max_new = np.searchsorted(xplot, fit_max_lim_new)
+
     main_fit_res = fitres[main_fit]
     if ncoefs_out<len(main_fit_res):
         raise ValueError(f"ncoefs is smaller than the number of coefficients of the main fit."
@@ -316,17 +330,17 @@ def fit_corrections(etaidx, data_dict, flav, data_tags,
             lab = f'{fit} failed'
         else:
             polytxt3 = ', selected' if fit==main_fit and len(fits2plot)>1 else ''
-            lab= fit+r', $\chi^2/N_{dof} = $'+r' {0:0.3g}/{1:0.0f}'.format(chi2s[fit], Ndofs[fit])+polytxt3
+            lab= fit+r'; $\chi^2/N_{dof} = $'+r' {0:0.3g}/{1:0.0f}'.format(chi2s[fit], Ndofs[fit])+polytxt3
         ax.plot(xplot, curve_yvals[fit], label=lab, markersize=0);
         if maxlimit_static_pnt and fit==main_fit:
-            ax.plot(xplot[:fit_max_lim_idx], curve_yvals[fit][:fit_max_lim_idx], label=f'{fit}  until the last stat point', markersize=0); #,linewidth=1.2
+            ax.plot(xplot[:xplot_max_new], curve_yvals[fit][:xplot_max_new], label=f'{fit}; range chosen', markersize=0, linewidth=0.8); #
         if plot_initial_val and fit=="MC truth":
             yvals_init = response_fnc(xplot, *fits2plot[fit][1])
             ax.plot(xplot, yvals_init, label=f"Initial values for {fit}", markersize=0);
         
     ###################### Plot formalities ######################
     ylim_tmp = ax.get_ylim()
-    ylim_pad = (ylim_tmp[1] - ylim_tmp[0])/1.3
+    ylim_pad = (ylim_tmp[1] - ylim_tmp[0])/1.6
     ax.set_ylim(ylim_tmp[0], ylim_tmp[1]+ylim_pad)
 
     ax.set_xlabel(r'$p_{T,reco}$ (GeV)')
@@ -336,15 +350,16 @@ def fit_corrections(etaidx, data_dict, flav, data_tags,
     ax.set_xticks([])
     ax.set_xticks([20, 50, 100, 200, 500, 1000])
     ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
-    hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
-    hep.label.exp_text(text=f'{jeteta_bins.idx2plot_str(etaidx)}\n{flav} jets', loc=2)
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    hep.label.exp_text(text=f'{jeteta_bins.idx2plot_str(etaidx)}; {flav} jets', loc=2, fontsize=mpl.rcParams["font.size"]/1.15)
 
     ### hack put errorbars before the curves in the legend
     #get handles and labels
     handles, labels = plt.gca().get_legend_handles_labels()
 
     #specify order of items in legend
-    nfits = len(fits2plot)
+    nfits = len(fits2plot)+maxlimit_static_pnt
     order = np.concatenate([np.arange(nfits,nfits+len(keys)+show_original_errorbars), np.arange(nfits)]) 
 
     #add legend to plot
@@ -353,7 +368,7 @@ def fit_corrections(etaidx, data_dict, flav, data_tags,
  
     ax.legend(odered_handles,
               ordered_labels,
-              loc="upper left", bbox_to_anchor=(0, 0.84)) #, prop={'size': 10}
+              loc="upper left", bbox_to_anchor=(0.01, 0.90)) #, prop={'size': 10}
     
     figdir2 = (figdir+'/'+data_tag.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
                 .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '').replace('\n', '')

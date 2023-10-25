@@ -379,7 +379,7 @@ def get_xsec_dict(data_tag, dataset_dictionary):
     ### if the 'data_tag' in the root contains any of the tags in `dataset_dictionary`, select this tag,
     ### e.g.,'QCD-Py_weights' contains 'QCD-Py', so select xsec from 'QCD-Py'.
     keys = np.array(list(dataset_dictionary.keys()))
-    matching_keys =  keys[np.where([ key in data_tag for key in keys])[0]]
+    matching_keys =  keys[np.where([ key in data_tag[:len(key)] for key in keys])[0]]
     if len(matching_keys)>1:
         raise ValueError(f"More than one key from the dataset dictionary matches the given data_tag = {data_tag}")
     elif len(matching_keys)==1:

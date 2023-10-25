@@ -12,10 +12,10 @@ def inv_mass_plus(lepton_pairs):
     return np.sqrt(np.abs(np.sum(lepton_pairs.E, axis=1)**2 - np.sum(lepton_pairs.px, axis=1)**2
                     - np.sum(lepton_pairs.py, axis=1)**2 - np.sum(lepton_pairs.pz, axis=1)**2))
 
-def jet_iso_cut(reco_jets):
+def jet_iso_cut(reco_jets, dr_cut=0.8):
     ''' Jet isolation cut'''
     drs, _ = reco_jets.metric_table(reco_jets, return_combinations=True, axis=1)
-    jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<0.8), axis=2 )
+    jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<dr_cut), axis=2 )
     return reco_jets[jet_iso_mask]
 
 def leading_jet_and_alpha_cut(reco_jets, leptons, events, dataset, alphaQCD, alphaDY, NjetsQCD, NjetsDY):
@@ -46,7 +46,9 @@ def leading_jet_and_alpha_cut(reco_jets, leptons, events, dataset, alphaQCD, alp
 
     return reco_jets, events
 
-def jet_pt_cut(reco_jets, mingenjetpt):
+def jet_pt_cut(reco_jets, mingenjetpt, apply=False):
+    if not apply:
+        return reco_jets
     jet_pt_mask = reco_jets.matched_gen.pt>mingenjetpt
     ## funny workaround to change the ak.type of jet_pt_mask from '10 * var * ?bool' to '10 * var * bool'
     ## otherwise after the correction .matched_gen field is not found.
@@ -102,16 +104,16 @@ def select_leptons(selectedEvents):
     leptons = genpart[lepton_mask]
     return leptons, tightelectrons, tightmuons
 
-def recolep_drcut(reco_jets, tightelectrons, tightmuons):
+def recolep_drcut(reco_jets, tightelectrons, tightmuons, dR=0.2):
     ''' Additional dR cut on not overlapping with leptons
     (tight lepton veto id does not seem to cut all the leptons)
     '''
     drs = reco_jets.metric_table(tightelectrons, return_combinations=False, axis=1 )
-    matched_with_promt_lep = np.any((drs<0.4),axis=2)
+    matched_with_promt_lep = np.any((drs<dR),axis=2)
     overlappng_reco_lep_mask = np.logical_not(matched_with_promt_lep)
 
     drs = reco_jets.metric_table(tightmuons, return_combinations=False, axis=1 )
-    matched_with_promt_lep = np.any((drs<0.4),axis=2)
+    matched_with_promt_lep = np.any((drs<dR),axis=2)
     overlappng_reco_lep_mask = overlappng_reco_lep_mask*np.logical_not(matched_with_promt_lep)
     reco_jets = reco_jets[overlappng_reco_lep_mask]
     return reco_jets
@@ -141,3 +143,16 @@ def select_Nth_jet(reco_jets, selectedEvents, N):
     selectedEvents = selectedEvents[N_jets_exist]
     reco_jets = reco_jets[:,N-1:N]
     return reco_jets, selectedEvents
+
+def jetMCmatching(reco_jets, dR=0.2, apply=False):
+    # MC jet matching
+    if not apply:
+        return reco_jets
+    matchedJets = ak.cartesian([reco_jets.matched_gen, reco_jets])
+    deltaR = matchedJets.slot0.delta_r(matchedJets.slot1)
+    matchedJets = matchedJets[deltaR < dR]
+    # matchedJets = matchedJets[ak.num(matchedJets) > 0]
+    return matchedJets.slot1
+
+def remove_apply(cut_tmp):
+    return {key: cut_tmp[key] for key in cut_tmp if key!='apply'}

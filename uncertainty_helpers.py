@@ -55,7 +55,7 @@ def convert_to_np_array(var):
     return var
 
 ptmin_global = 30
-ptmax_global = 500
+ptmax_global = 1000
 
 @dataclass
 class FlavorFractions():

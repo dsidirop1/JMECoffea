@@ -62,7 +62,7 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=
     if not os.path.exists(FitFigDir2):
         os.mkdir(FitFigDir2)
 
-    hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
     hep.label.exp_text(text=f'{flavor} jets\n{tag} sample', loc=2, ax=ax)
     figname = FitFigDir2+'/corr_vs_pt_'+tag+'_'+flavor
     plt.savefig(figname+'.pdf');
@@ -142,14 +142,17 @@ def plot_response_dist(histo, p2, fitlims, figName, dataset_name, hep_txt='', tx
     
     fig, ax2 = plt.subplots();
     colors=plt.rcParams['axes.prop_cycle'].by_key()['color']
+    # hep.histplot(histo.values(), histo.axes[0].edges-0.20, yerr=np.sqrt(histo.variances()), label=dataset_name, histtype='fill', alpha=0.6, color=colors[0])
     plot = histo.plot1d(ax=ax2, label=dataset_name, histtype='fill', alpha=0.6, color=colors[0])
     plot = histo.plot1d(ax=ax2, histtype='errorbar', alpha=0.6, color=colors[0], linewidth=1.1, markersize=0)
-    ax2.plot(f_xvals, fgaus, label='Gaussian fit', markersize=0, linewidth=1.8, color=colors[1])
+    # ax2.plot(f_xvals, fgaus, label='Gaussian fit', markersize=0, linewidth=1.8, color=colors[1])
+    ax2.plot(f_xvals, fgaus, label='fit', markersize=0, linewidth=1.8, color=colors[1])
     ax2.plot(f_xvals_full, fgaus_full, '--', markersize=0, linewidth=1.2, color=colors[1])
     ax2.set_xlabel("Response ($p_{T,reco}/p_{T,ptcl}$)")
     ax2.set_ylabel("Events")
     max_lim = np.min([np.max(xvals), 2.0])
     ax2.set_xlim([0,max_lim])
+    # ax2.set_xlim([0.2,1.8])
     ylim = ax2.get_ylim()
     # Use the scientific notation already from 4 zeros
     formatter = ticker.ScalarFormatter(useMathText=False)
@@ -157,12 +160,18 @@ def plot_response_dist(histo, p2, fitlims, figName, dataset_name, hep_txt='', tx
     ax2.yaxis.set_major_formatter(formatter)
     yh = (ylim[1]-ylim[0])
     ax2.set_ylim(ylim[0], ylim[1]+yh*0.2 )
+
+    # #### for the poster
+    # ax2.vlines(0.996, 1.0e-5, 1.9e-5, linestyles='-',color="black",
+    #         linewidth=2.2,)
+    # ax2.text(1.10, 1.55e-5, r'median $\approx$ mean '+f'\n'+r'=$0.996\pm0.004$ ', fontsize=11, color='black')
+
     if print_txt:
         hep_txt+=txt2print
-    ax2.legend();
+    ax2.legend()
     
     # hep.label.exp_text(text=hep_txt, loc=0)
-    hep.cms.label("Preliminary", loc=0, data=False)
+    # hep.cms.label("Private work", loc=0, data=False, ax=ax2, rlabel='')
     hep.label.exp_text(text=hep_txt, loc=2)
     plt.savefig(figName+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
     plt.savefig(figName+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);

@@ -27,8 +27,8 @@ import hist
 import warnings
 
 from plotters.pltStyle import pltStyle
-pltStyle(style='hep')
-plt.rcParams['font.size'] = plt.rcParams['font.size']/0.98
+pltStyle(style='hep') #, font_frac=1.40
+# plt.rcParams['font.size'] = plt.rcParams['font.size']/0.98
 plt.rcParams['figure.dpi'] = 150
 import os
 
@@ -54,7 +54,7 @@ def main(data_tag='Pythia-TTBAR'):
     ### HCalPart: bin in HCal sectors, CaloTowers: the standard JERC binning,
     ### CoarseCalo: like 'CaloTowers' but many bins united; onebin: combine all eta bins
     ### Preprocessing always done in CaloTowers
-    eta_binning  = "Summer20Flavor"  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
+    eta_binning  = "HCalPart"  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
     sum_neg_pos_eta_bool=True  ### if combining the positive and negative eta bins
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     
@@ -65,7 +65,7 @@ def main(data_tag='Pythia-TTBAR'):
     # data_tag = 'Herwig-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
     # data_tag = 'DY-FxFx'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '_iso_cut' #'_3rd_jet' # _cutpromtreco _Aut18binning   
+    add_tag = '' #'_3rd_jet' # _cutpromtreco _Aut18binning   
 
 
 
@@ -100,7 +100,7 @@ def main(data_tag='Pythia-TTBAR'):
 
     output = util.load(outname)
     print("Loaded histograms from: ", outname)
-    xsec_dict, legend_label = get_xsec_dict(tag_full, dataset_dictionary)
+    xsec_dict, legend_label = get_xsec_dict(data_tag, dataset_dictionary)
     
     keys = output.keys()
     Nev = {key: output[key]['cutflow']['all_events'].value for key in keys}
@@ -168,8 +168,9 @@ def main(data_tag='Pythia-TTBAR'):
             print("Response fits won't be saved")
     
         for i in range(pt_bins.nbins):
-    #     for i in range(4,10):
+        # for i in range(1,10):
             for k in range(fiteta_bins.nbins):
+            # for k in range(1):
                 if not scaled_hist==None:
                     histos = {sample: response_hists[sample][i, :, k] for sample in response_hists}
                     histos2plot = {key[10:]:histos[key] for key in histos.keys()}
@@ -229,6 +230,7 @@ def main(data_tag='Pythia-TTBAR'):
     medians = []
     medianstds = []
     flavors = ['b', 'ud', 'all', 'g', 'c', 's', 'q', 'u', 'd', 'unmatched']
+    # flavors = ['unmatched']
     if not combine_antiflavour:
         flavors = np.concatenate([[flav, flav+'bar'] if flav in barable_flavors else [flav] for flav in flavors ])
     print('-'*25)
@@ -267,6 +269,10 @@ def main(data_tag='Pythia-TTBAR'):
     print("All done. Congrats!")
   
 if __name__ == "__main__":
-    data_tags = ['Pythia-TTBAR', 'Herwig-TTBAR', 'QCD-MG-Py', 'QCD-MG-Her', 'QCD-Py', 'DY-MG-Py', 'DY-MG-Her']
+    # data_tags = ['Pythia-TTBAR', 'Herwig-TTBAR', 'QCD-MG-Py', 'QCD-MG-Her', 'QCD-Py', 'DY-MG-Py', 'DY-MG-Her']
+    # data_tags = ['Pythia-TTBAR_iso_dr_0p8','Pythia-TTBAR_iso_dr_1p2', 'Pythia-TTBAR_iso_dr_1p5'] #Pythia-semilep-TTBAR
+    # data_tags = ['scaled_times100_pion'] #Pythia-semilep-TTBAR
+    data_tags = ['QCD-Py_pu_genwt'] #Pythia-semilep-TTBAR
+    # data_tags = ['QCD-Py', 'Pythia-semilep-TTBAR', 'DY-MG-Py' ] #Pythia-semilep-TTBAR
     for data_tag in data_tags:
         main(data_tag=data_tag)

@@ -20,11 +20,17 @@ processor_config = {
         "apply":False,
         "N": 2,
     },
-    "jet_iso_cut":{"apply":True},
+    "jet_iso_cut":{"apply":False,
+                   "dr_cut": 0.8,
+    },
+    "reco_jetMCmatching":{"apply":True,
+                          "dR":   0.2,
+    },
     ### Choose the jet flavour. Some samples have missing `partonFlavour`, so one has to redo the flavour matching oneself. Two different option were implemented:
     ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
     ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
     "jetflavour":'partonFlavour',
-    "use_weights": False,
+    "use_gen_weights": False,
+    "use_pu_weights": True,
     # ... Add more cuts and parameters as needed
 }
