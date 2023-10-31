@@ -69,7 +69,7 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=
     plt.savefig(figname+'.png');
     print(f'Figure saved: {figname}.pdf /.png')
 
-    plt.show();
+    #plt.show();
     
 def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, tag, flavor, plotptvals=[15, 35, 150, 400]):
     ### To ignore the points with 0 on y axis when setting the y axis limits
@@ -125,7 +125,7 @@ def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, tag, flavor, plotptva
     plt.savefig(figname+'.pdf');
     plt.savefig(figname+'.png');
     print(f'Figure saved: {figname}.pdf /.png')
-    plt.show();
+    #plt.show();
     
 from helpers import gauss
 import matplotlib.ticker as ticker
@@ -166,7 +166,7 @@ def plot_response_dist(histo, p2, fitlims, figName, dataset_name, hep_txt='', tx
     hep.label.exp_text(text=hep_txt, loc=2)
     plt.savefig(figName+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
     plt.savefig(figName+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
-    plt.show(); 
+    #plt.show(); 
 
 
 def plot_response_dist_stack(h_stack, p2, figName, dataset_name, hep_txt='', txt2print='', print_txt=True ):
@@ -194,4 +194,4 @@ def plot_response_dist_stack(h_stack, p2, figName, dataset_name, hep_txt='', txt
     hep.label.exp_text(text=hep_txt, loc=2)
     plt.savefig(figName+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
     plt.savefig(figName+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);
-    plt.show();   
+    #plt.show();   

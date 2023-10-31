@@ -56,7 +56,7 @@ def main():
     
     # 'iterative' for local (slow/concurrent) iterative executor; 'dask' for local (parallel) dask executor;
     # 'condor' for dask on condor; 'coffea-casa' for dask on coffea-casa
-    executor = 'dask' 
+    executor = 'condor' 
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
     test_run          = False   ### True if run only on one file and five chunks to debug processor
 
