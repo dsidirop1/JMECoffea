@@ -100,6 +100,7 @@ class Processor(processor.ProcessorABC):
         path_to_PU_weights = "/cvmfs/cms.cern.ch/rsync/cms-nanoAOD/jsonpog-integration/POG/LUM/2018_UL/puWeights.json.gz"
         self.pucorr = correctionlib.CorrectionSet.from_file(path_to_PU_weights)
 
+#         ### Attempt to apply closure from a prederived file
 #        df_csv = pd.read_csv('out_txt/Closure_L5_QCD_Pythia.coffea').set_index('etaBins')
 #        self.closure_corr = df_csv.to_numpy().transpose()
 #        self.closure_corr = np.pad(self.closure_corr,1,constant_values=1)
@@ -139,13 +140,14 @@ class Processor(processor.ProcessorABC):
 #         self.for_memory_testing()
         
         cutflow_axis = hist.axis.StrCategory([], growth=True, name="cutflow", label="Cutflow Scenarios")
-        output['cutflow'] = hist.Hist(cutflow_axis, storage="weight", label="Counts")
+        output['cutflow_events'] = hist.Hist(cutflow_axis, storage="weight", label="N events")
+        output['cutflow_jets'] = hist.Hist(cutflow_axis, storage="weight", label="N jets")
 
         dataset = events.metadata['dataset']
     
         ############ Event Cuts ############
         # apply npv cuts
-        output['cutflow'].fill(cutflow='all_events', weight=len(events))
+        output['cutflow_events'].fill(cutflow='all_events', weight=len(events))
         
         npvCut = (events.PV.npvsGood > 0)
         pvzCut = (np.abs(events.PV.z) < 24)
@@ -153,10 +155,10 @@ class Processor(processor.ProcessorABC):
         # dzvtxCut = (np.abs(events.GenVtx.z-events.PV.z)<0.2)
         
         selectedEvents = events[npvCut & pvzCut & rxyCut ] #& dzvtxCut
-        output['cutflow'].fill(cutflow='selected_events', weight=len(selectedEvents))
+        output['cutflow_events'].fill(cutflow='gen vertex cut', weight=len(selectedEvents))
         # get GenJets and Jets
         jets = selectedEvents.Jet
-        output['cutflow'].fill(cutflow='all_jets', weight=ak.sum(ak.num(jets)))
+        output['cutflow_jets'].fill(cutflow='all_jets', weight=ak.sum(ak.num(jets)))
 
         ########### Redo the flavour tagging if neccesarry. LHE Flavour2 derivation has to be done before the jet cuts  ###########
         #### Some samples have a missing LHE flavour infomration ####
@@ -171,7 +173,7 @@ class Processor(processor.ProcessorABC):
         # Require that at least one gen jet is matched
         jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
         selected_jets = jets[jet_gen_match_mask]
-        output['cutflow'].fill(cutflow='gen_matched', weight=ak.sum(ak.num(selected_jets)))
+        output['cutflow_jets'].fill(cutflow='gen matched', weight=ak.sum(ak.num(selected_jets)))
 
         ############ Apply Jet energy corrections on the jets ###########
         # define variables needed for corrected jets
@@ -190,28 +192,28 @@ class Processor(processor.ProcessorABC):
         # # cuts on DY and ttbar based on L3Res selections https://twiki.cern.ch/twiki/bin/view/CMS/L3ResZJet
         if self.cfg["good_lepton_cut"]["apply"]==True:
             selectedEvents, reco_jets, leptons, tightelectrons, tightmuons = good_lepton_cut(reco_jets, selectedEvents, dataset, leptons, tightelectrons, tightmuons)
-        output['cutflow'].fill(cutflow='events passing the lepton selection', weight=len(selectedEvents))
+        output['cutflow_events'].fill(cutflow='lepton selection', weight=len(selectedEvents))
 
         # Require tight lepton veto id on jets = no matched (dressed) leptons in the jet;
         # Leptons are also reconstructed as jets with just one (or more) particle, so it is important to remove them
         if self.cfg["tight_lepton_veto_id"]["apply"]==True:
             reco_jets[(reco_jets.jetId >> 2 & 1)==1] ### tight lepton veto id
-        output['cutflow'].fill(cutflow='jets, tight lepton id', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow_jets'].fill(cutflow='tight lep. id', weight=ak.sum(ak.num(reco_jets)))
 
         if self.cfg["recolep_drcut"]["apply"]==True:
             reco_jets = recolep_drcut(reco_jets, leptons, leptons)
-        output['cutflow'].fill(cutflow='jets, dR cut with leptons', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow_jets'].fill(cutflow=r'$\Delta R$'+' cut with leptons', weight=ak.sum(ak.num(reco_jets)))
 
         cut_tmp = self.cfg["jet_pt_cut"]
         if cut_tmp["apply"]==True:
             reco_jets = jet_pt_cut(reco_jets, cut_tmp["mingenjetpt"])
-        output['cutflow'].fill(cutflow='jetpt cut', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow_jets'].fill(cutflow='jetpt cut', weight=ak.sum(ak.num(reco_jets)))
 
         # redo the jet matching with potentially lower dr cut than matched automatically
         cut_tmp = self.cfg["reco_jetMCmatching"]
         if cut_tmp["apply"]==True:
             reco_jets = jetMCmatching(reco_jets, **cut_tmp)
-        output['cutflow'].fill(cutflow='matched gen cut', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow_jets'].fill(cutflow='matched gen cut', weight=ak.sum(ak.num(reco_jets)))
         ######### Alpha cut = cut on the additional jet activity  ############    
         # Not used since run 2 because the large pileup causes a bias    
         cut_tmp = self.cfg["leading_jet_and_alpha_cut"]
@@ -221,14 +223,14 @@ class Processor(processor.ProcessorABC):
         cut_tmp = self.cfg["select_Nth_jet"]
         if cut_tmp["apply"]==True:
             reco_jets, selectedEvents = select_Nth_jet(reco_jets, selectedEvents, cut_tmp["N"])
-        output['cutflow'].fill(cutflow=f'alpha cut; leading jets', weight=ak.sum(ak.num(reco_jets)))
-        output['cutflow'].fill(cutflow=f'events, alpha cut',       weight=len(selectedEvents))
+        output['cutflow_jets'].fill(cutflow=r'$\alpha$ cut'+'\nleading jets', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow_events'].fill(cutflow=r'$\alpha$ cut',       weight=len(selectedEvents))
 
         # # Cut on overlapping jets
         cut_tmp = self.cfg["jet_iso_cut"]
         if cut_tmp["apply"]==True:
             reco_jets = jet_iso_cut(reco_jets, **remove_apply(cut_tmp))
-        output['cutflow'].fill(cutflow='iso jets', weight=ak.sum(ak.num(reco_jets)))
+        output['cutflow_jets'].fill(cutflow='iso jets', weight=ak.sum(ak.num(reco_jets)))
         gen_jets = reco_jets.matched_gen
 
         ############ Derive LHE flavour   ###########
@@ -296,6 +298,7 @@ class Processor(processor.ProcessorABC):
         # print("Try to np with Allow missing:")
         # ak.flatten(gen_jetpt).to_numpy(allow_missing=True)
         # print("Before filling:")
+        # print("weights_jet = ", weights_jet)
 
         ########### Filling of the histograms ###############
         for flav in flavors:

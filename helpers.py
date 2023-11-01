@@ -213,14 +213,26 @@ def find_ttbar_xsec(key):
     return xsec
 
 
-def get_median(histo, Neff):
+def get_median(histo, Neff, x_range=None):
     ''' Calculate median and median error (assuming Gaussian distribution).
     This is the binned median, not the real data median
     Extrapolation withing bins is performed.
     '''
+    
     xvals = histo.axes[0].centers
+    if x_range == None:
+        xmi, xma = np.searchsorted(xvals, [min(xvals), max(xvals)]) + [0,1]
+    elif len(x_range)!=2:
+        raise ValueError("x_range should be a list [xmin; xmax] in which to evaluate the median")
+    else:
+        xmi, xma = np.searchsorted(xvals, x_range) + [0,1]
     bin_edges = histo.axes[0].edges
     yvals = histo.values()
+
+    xvals = xvals[xmi:xma]
+    yvals = yvals[xmi:xma]
+    bin_edges = bin_edges[xmi:xma+1]
+
     yvals_cumsum = np.cumsum(yvals)
     N = np.sum(yvals)
 
@@ -274,12 +286,11 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
         try:
             p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
 #             print("p vals 0 = ", p)
-            ######## Second Gaussian ########
+            ######## Second or further Gaussians ########
             for i in range(Nfit-1):
                 xfit_l, xfit_h = np.searchsorted(xvals,
                                                  [p[1]-np.abs(p[2])*sigma_fit_window,
-                                                  p[1]+np.abs(p[2])*sigma_fit_window])
-                
+                                                  p[1]+np.abs(p[2])*sigma_fit_window], side='left') - [0,1]
                 # if there are only 3pnts, the uncertainty is infty
                 # (or if too small, then the fit doesn't become good),
                 # so increase the range
@@ -371,6 +382,14 @@ def get_xsecs_filelist_from_file(file_path, data_tag, test_run=False):
     xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
     file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
     return xsec_dict, file_dict
+
+from fileNames.available_datasets import legend_labels
+def legend_str_to_filename(legend_str):
+    ''' Removes the latex and other formatting from the legend string and replaces it with a filename friendly string.
+    '''
+    string = (legend_str.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
+                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('\n', '').replace('$', '').replace('\\', ''))
+    return string
 
 
 def get_xsec_dict(data_tag, dataset_dictionary):

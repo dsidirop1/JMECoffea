@@ -8,12 +8,19 @@ import sys
 # if top_path not in sys.path:
 #     sys.path.append(top_path)
 from common_binning import JERC_Constants
+from helpers import legend_str_to_filename
 
-def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=[0, 1.305, 2.5, 3.139]):
-
+def plot_corrections(result, ptbins_c, etabins, tag, flavor, plotetavals=[0, 1.305, 2.5, 3.139], plotmean=True):
+    ''' plotmean: if True plot not only median but also mean
+    
+    '''
     ### To ignore the points with 0 on y axis when setting the y axis limits
-    mean_p = mean.copy()
-    mean_p[mean_p==0] = np.nan
+    # mean, meanstd, median, medianstd =  [{"a":2, "b":3,"3":5}[key] for key in ["a", "b"]] 
+    median_p = result["Median"].copy()
+    median_p[median_p==0] = np.nan
+    if plotmean:
+        mean_p = result["Mean"].copy()
+        mean_p[mean_p==0] = np.nan
 
     fig, ax = plt.subplots() 
     start = np.searchsorted(ptbins_c, 20, side='left') #np.where(ptbins<=20)[0][-1]
@@ -23,18 +30,32 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=
     lastbin = -1
     
     ptbins_plot = ptbins_c[start:lastbin]
-    meanstd = meanstd[start:lastbin,:]
-    mean_p = mean_p[start:lastbin]
+    medianstd = result["MedianStd"][start:lastbin,:]
+    median_p  = median_p[start:lastbin]
+    mean_p    = mean_p[start:lastbin] if plotmean else None
+    meanstd   = result["MeanStd"][start:lastbin,:] if plotmean else None
     
 #     print(f'ptvinsplot = {ptbins_plot}')
+    points_ls = []
     for etaidx in etaidxs:
-        plt.errorbar(ptbins_plot, mean_p[:,etaidx], yerr=meanstd[:,etaidx], marker='o',
+        mc = next(ax._get_lines.prop_cycler)
+        points, _, _ = plt.errorbar(ptbins_plot, median_p[:,etaidx], yerr=medianstd[:,etaidx], # marker='o',
                      linestyle="none", label=etabins.idx2plot_str(etaidx),
-                     capsize=1.6, capthick=0.7, linewidth=1.0)
+                     capsize=1.6, capthick=0.7, linewidth=1.0, **mc)
+        if plotmean:
+            points2, caps, _ = plt.errorbar(ptbins_plot, mean_p[:,etaidx], yerr=meanstd[:,etaidx], # marker='o',
+                     linestyle="none",
+                     capsize=1.1, capthick=0.7, linewidth=1.0, mfc="white", markeredgewidth=1.2, **mc)
+            
+            caps[0].set_marker(".")
+            caps[1].set_marker(".")
+            if len(points_ls) == 0:
+                points_ls.append(points)
+                points_ls.append(points2)
 
     ### Calculate resonable limits excluding the few points with insane errors
-    yerr_norm = np.concatenate([meanstd[:,etaidxs] ])
-    y_norm = np.concatenate([mean_p[:,etaidxs]])
+    yerr_norm = np.concatenate([medianstd[:,etaidxs] ])
+    y_norm = np.concatenate([median_p[:,etaidxs]])
     norm_pos = (yerr_norm<0.02) &  (yerr_norm != np.inf) & (y_norm>-0.1)
     
     # if for too low statistics that no point passes the criteria then plot full y-range
@@ -42,21 +63,37 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=
         left_lim = np.min((y_norm-yerr_norm)[norm_pos])
         right_lim = np.max((yerr_norm+y_norm)[norm_pos])
         lim_pad = (right_lim - left_lim)/20
-        ax.set_ylim(left_lim-lim_pad, right_lim+lim_pad*4)
+        ax.set_ylim(left_lim-lim_pad, right_lim+lim_pad*13)
     
     ax.set_xscale('log')
     
     good_xlims = ax.get_xlim()
+    ax.hlines(1,1, 10000, linestyles='--',color="black",
+        linewidth=.9,)
+    if flavor == 'all':
+        ax.hlines(0.99,1, 10000, linestyles='dotted',color="black",
+            linewidth=.9,)
+        ax.hlines(1.01,1, 10000, linestyles='dotted',color="black",
+            linewidth=.9,)
+        ax.hlines(0.999,1, 10000, linestyles='dotted',color="black",
+            linewidth=.9,)
+        ax.hlines(1.001,1, 10000, linestyles='dotted',color="black",
+            linewidth=0.9,)
     ax.set_xticks([20, 50, 100, 500, 1000, 5000])
     ax.set_xlim(good_xlims)
     ax.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
     ax.set_xlabel(r'$p_{T,ptcl}$ (GeV)');
     ax.set_ylabel(r'median response');
-    ax.legend()
+
+    legend1 = ax.legend(points_ls, ["Median", "Mean"], loc="upper left", bbox_to_anchor=(0, 0.86))
+    ax.legend(loc="upper right")
+    if plotmean:
+        ax.add_artist(legend1)
 
     tag = tag[4:] #clip the _L5_
     FitFigDir1 = 'fig/corr_vs_pt'
     FitFigDir2 = FitFigDir1+'/'+tag
+    FitFigDir2 = legend_str_to_filename(FitFigDir2)
     if not os.path.exists(FitFigDir1):
         os.mkdir(FitFigDir1)
     if not os.path.exists(FitFigDir2):
@@ -65,6 +102,7 @@ def plot_corrections(mean, meanstd, ptbins_c, etabins, tag, flavor, plotetavals=
     hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
     hep.label.exp_text(text=f'{flavor} jets\n{tag} sample', loc=2, ax=ax)
     figname = FitFigDir2+'/corr_vs_pt_'+tag+'_'+flavor
+    figname = legend_str_to_filename(figname)
     plt.savefig(figname+'.pdf');
     plt.savefig(figname+'.png');
     print(f'Figure saved: {figname}.pdf /.png')
@@ -94,7 +132,12 @@ def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, tag, flavor, plotptva
     for HCal_border in JERC_Constants.etaBinsEdges_Win14():
         ax.vlines(HCal_border,0, 2, linestyles='--',color="gray",
             linewidth=1,)
-
+ 
+    good_xlims = ax.get_xlim()
+    ax.hlines(1,-6, 6, linestyles='--',color="black",
+        linewidth=.9,)
+    ax.set_xlim(good_xlims)
+ 
     ### Calculate resonable limits excluding the few points with insane errors
     yerr_norm = np.concatenate([meanstd[ptidxs] ])
     y_norm = np.concatenate([mean_p[ptidxs]])
@@ -108,20 +151,23 @@ def plot_corrections_eta(mean, meanstd, ptbins, etabins_c, tag, flavor, plotptva
     ax.set_xlabel(r'$|\eta|$');
     ax.set_ylabel(r'median response');
 #     ax.set_xscale('log')
-    ax.legend()
+    ax.legend(loc='lower left')
     
     tag = tag[4:]
     FitFigDir1 = 'fig/corr_vs_pt'
     FitFigDir2 = FitFigDir1+'/'+tag
+    FitFigDir2 = legend_str_to_filename(FitFigDir2)
     if not os.path.exists(FitFigDir1):
         os.mkdir(FitFigDir1)
     if not os.path.exists(FitFigDir2):
         os.mkdir(FitFigDir2)
 
-    hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
     hep.label.exp_text(text=f'{flavor} jets\n{tag} sample', loc=2, ax=ax)
     # hep.label.exp_text(text=f'{flavor} jets, {tag} sample', loc=0, ax=ax)
     figname = FitFigDir2+'/corr_vs_eta_'+tag+'_'+flavor
+    figname = legend_str_to_filename(figname)
     plt.savefig(figname+'.pdf');
     plt.savefig(figname+'.png');
     print(f'Figure saved: {figname}.pdf /.png')
@@ -171,7 +217,7 @@ def plot_response_dist(histo, p2, fitlims, figName, dataset_name, hep_txt='', tx
     ax2.legend()
     
     # hep.label.exp_text(text=hep_txt, loc=0)
-    # hep.cms.label("Private work", loc=0, data=False, ax=ax2, rlabel='')
+    hep.cms.label("Private work", loc=0, data=False, ax=ax2, rlabel='')
     hep.label.exp_text(text=hep_txt, loc=2)
     plt.savefig(figName+'.png', dpi=plt.rcParamsDefault['figure.dpi']);
     plt.savefig(figName+'.pdf', dpi=plt.rcParamsDefault['figure.dpi']);

@@ -10,6 +10,7 @@ processor_config = {
         "mingenjetpt": 15,
     },
     "leading_jet_and_alpha_cut":{
+    # Alpha cut not used (alpha=1) since run 2 because the large pileup causes a bias
         "apply":True,
         "alphaQCD": 1.0,
         "alphaDY":  1.0,
@@ -17,10 +18,11 @@ processor_config = {
         "NjetsDY":  2,
     },
     "select_Nth_jet":{
+    # for debugging purposses, select exactly the Nth jet in each event
         "apply":False,
         "N": 2,
     },
-    "jet_iso_cut":{"apply":False,
+    "jet_iso_cut":{"apply":True,
                    "dr_cut": 0.8,
     },
     "reco_jetMCmatching":{"apply":True,

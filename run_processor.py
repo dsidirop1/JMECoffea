@@ -40,7 +40,29 @@
 
 
 # ### Imports 
+# import sys
 import os
+# coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
+# if not os.path.exists(coffea_path):
+#     raise ValueError(f"The path to the coffea installation does not exist. Please supply the correct path or comment out this line if using the environment path. The provided path is: {coffea_path}.")
+# if coffea_path not in sys.path:
+#     sys.path.insert(0,coffea_path)
+
+# coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/dask/'
+# if not os.path.exists(coffea_path):
+#     raise ValueError(f"The path to the coffea installation does not exist. Please supply the correct path or comment out this line if using the environment path. The provided path is: {coffea_path}.")
+# if coffea_path not in sys.path:
+#     sys.path.insert(0,coffea_path)
+
+
+from packaging import version
+import coffea
+if version.parse(coffea.__version__) < version.parse('0.7.21'):
+    raise ValueError(f"The coffea version used is {coffea.__version__} which is a buggy version when used on dask. Either update to 0.7.21 or remove this error statement.")
+
+# import coffea
+# print("Coffea version: ", coffea.__version__)
+
 import time
 from coffea import processor, util
 from coffea.nanoevents import NanoAODSchema, BaseSchema
@@ -56,16 +78,16 @@ def main():
     
     # 'iterative' for local (slow/concurrent) iterative executor; 'dask' for local (parallel) dask executor;
     # 'condor' for dask on condor; 'coffea-casa' for dask on coffea-casa
-    executor = 'dask' 
+    executor = 'condor' 
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = True   ### True if run only on one file and five chunks to debug processor
+    test_run          = False   ### True if run only on one file and five chunks to debug processor
 
     Nfiles = -1                 ### number of files for each sample; -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     processor_name = 'CoffeaJERCProcessor'+tag_Lx
     from CoffeaJERCProcessor_L5_config import processor_config, processor_dependencies
-    # processor_name = 'Processor_HT_spectrum'
+    # processor_name = 'Processor_correctionlib_issue'
     # processor_config = None
     # processor_dependencies = []
 
@@ -75,11 +97,14 @@ def main():
     ### Or manually by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'DY-MG-Py' # 'QCD-MG-Her' #'Herwig-TTBAR' 
-    # data_tag = 'DY-FxFx'
+    data_tag = 'Pythia-semilep-TTBAR' # QCD-Py Pythia-TTBAR 'QCD-MG-Her' #'Herwig-TTBAR' 
+    # data_tag = 'not_scaled_pion'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '_iso_cut' #'_3rd_jet' # _cutpromtreco _Aut18binning   
-    run_comment = 'Testing the pion/ antipion response studies.'                          #### Comment for the log file: e.g., why the run is made?
+    add_tag = '' # _iso_dr_0p8 '_3rd_jet' # _cutpromtreco _Aut18binning   
+    run_comment = 'Reruning all with the cut on the leading generated jets/ not on the reco jets'
+    # run_comment = 'Testing the leading generated jets cut'
+    # run_comment = 'Testing running the sample with scaled pions.'                          
+    #### Comment for the log file: e.g., why the run is made?
     
     certificate_dir = '/afs/cern.ch/user/a/anpotreb/k5-ca-proxy.pem'
 
@@ -94,7 +119,7 @@ def main():
     # ### Specify datasets separatelly
     dataset = None
     fileslist = None
-    # fileslist = ['root://xrootd-cms.infn.it/TTToSemiLeptonic_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2510000/056516']
+    # fileslist = ['root://xrootd-cms.infn.it//store/mc/RunIISummer20UL18NanoAODv9/TTTo2L2Nu_TuneCP5_13TeV-powheg-pythia8/NANOAODSIM/20UL18JMENano_106X_upgrade2018_realistic_v16_L1v1-v1/2520000/C9B528C2-F9A0-5D48-851B-534BCA92532F.root']
 
     ### Choose the correct redirector
     ## assume running on the LPC
@@ -102,6 +127,7 @@ def main():
     ## assume running on the lxplus
     # xrootdstr = 'root://cms-xrd-global.cern.ch//'
     xrootdstr = 'root://xrootd-cms.infn.it/'
+    # xrootdstr = ''
 
     ################ End of Parameters of the run and switches  #########################
     
@@ -193,8 +219,7 @@ def main():
        client.upload_file(processor_name+'.py')
        for dep in processor_dependencies:
           client.upload_file(dep)
-    
-    if(executor=='condor' or executor=='dask'):
+    elif(executor=='condor' or executor=='dask'):
         from dask.distributed import Client 
         if executor=='dask':
             client = Client()
@@ -221,8 +246,8 @@ def main():
                     'MY.JobFlavour': '"longlunch"',
                 },
             )
-            cluster.adapt(minimum=2, maximum=200)
-            cluster.scale(8)
+            cluster.adapt(minimum=2, maximum=400)
+            cluster.scale(10)
             client = Client(cluster)
         
         client.upload_file(processor_name+'.py')
@@ -230,16 +255,17 @@ def main():
             client.upload_file(dep)
 
         print("Printing the client information: \n", client)
+    elif executor=='iterative' or executor=='futures':
+        print(f"Running on {executor} executor.")
+    else:
+        ValueError(f"Executor {executor} not supported. Please choose 'iterative', 'dask', 'condor' or 'coffea-casa'.")
         
     
     # ### Run the processor
     
     tstart = time.time()
-    
-    seed = 1234577890
-    prng = RandomState(seed)
-    chunksize = 7000
-    # maxchunks = 100
+    chunksize = 1000 ### should be lowered to ~2000 for ttbar to avoid out-of-memory issues, the rest can go with 10000, or maybe more. Can be finetuned more. 
+    # maxchunks = 50
     
     if not load_preexisting:
         if executor=='iterative':
@@ -281,7 +307,7 @@ def main():
         print("Loaded histograms from: ", outname)
     
     #### Attempt to prevent the error when the cluster closes. Doesn't always work.
-    if executor=='condor' or executor=='coffea-casa' or executor=='dask':
+    if executor=='condor' or executor=='coffea-casa':
         client.close()
         time.sleep(5)
         cluster.close()
@@ -295,7 +321,7 @@ def main():
         # log_file = run_log_name.open('a')
         with open(run_log_name, 'a') as log_file:
             log_file.writelines(['\n' + file_name_title + '\nRun comment: ' + run_comment])
-            log_file.writelines(['\n' + printout, '\nConfig parameters:\n' + str(processor_config)])
+            log_file.writelines(['\n' + printout, '\nConfig parameters:\n' + str(processor_config)+ '\n'])
     
     print('-----'*10)
     print("All done. Congrats!")

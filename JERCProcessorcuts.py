@@ -19,30 +19,35 @@ def jet_iso_cut(reco_jets, dr_cut=0.8):
     return reco_jets[jet_iso_mask]
 
 def leading_jet_and_alpha_cut(reco_jets, leptons, events, dataset, alphaQCD, alphaDY, NjetsQCD, NjetsDY):
-    ''' Alpha cut = cut on the additional jet activity.
-    Not used (alpha=1) since run 2 because the large pileup causes a bias
+    '''
+    Selects the leading generator jets and performs the alpha cut
+    Alpha cut = cut on the additional jet activity: to avoid effects due to a non-physical jet spectrum in the MC
     '''
     if "QCD" in dataset:
-        alphacut = alphaQCD #if the alpha cut is different from the default
-        # Correctly/safely treat the cases where there are less then 3 jets left after the cuts
-        # select only the first three jets on QCD samples
-        # to avoid effects due to a non-physical jet spectrum 
-        if NjetsQCD>-1:
-            reco_jetspt = ak.pad_none(reco_jets.pt, NjetsQCD, axis=1, clip=True)
+        if NjetsQCD!=-1:
+            leading_gen_jet_indices = ak.argsort(reco_jets.matched_gen.pt, axis=1, ascending=False)[:,:NjetsQCD]
+            reco_jets = reco_jets[leading_gen_jet_indices]
 
-        if NjetsQCD>2:
+        if NjetsQCD>2 or NjetsQCD==-1:
+            # To correctly/safely treat the cases where there are less then 3(2) jets in QCD (DY) left after the cuts
+            # pad nons to the correct size of the jets and then accept all the events where there are less than 3(2) jets assuming that all the bad jets where already cut out
+            reco_jetspt = ak.pad_none(reco_jets.pt, 3, axis=1, clip=False)
             alpha = reco_jetspt[:,2]*2/(reco_jetspt[:,0]+reco_jetspt[:,1])
             alpha = ak.fill_none(alpha,0)
-            reco_jets = reco_jets[alpha<alphacut][:,:3]
-            events = events[alpha<alphacut]
+            reco_jets = reco_jets[alpha<alphaQCD] #[:,:NjetsQCD]
+            events = events[alpha<alphaQCD]
         
     elif 'DY' in dataset:
-        alphacut = alphaDY #if the alpha cut is different from the default
-        reco_jetspt = ak.pad_none(reco_jets.pt, NjetsDY, axis=1, clip=True)
-        alpha = reco_jetspt[:,1]/ak.sum(leptons.pt,axis=1)
-        alpha = ak.fill_none(alpha,0)
-        reco_jets = reco_jets[alpha<alphacut][:,:2]
-        events = events[alpha<alphacut]
+        if NjetsDY!=-1:
+            leading_gen_jet_indices = ak.argsort(reco_jets.matched_gen.pt, axis=1, ascending=False)[:,:NjetsDY]
+            reco_jets = reco_jets[leading_gen_jet_indices]
+
+        if NjetsQCD>1 or NjetsQCD==-1:
+            reco_jetspt = ak.pad_none(reco_jets.pt, 2, axis=1, clip=False)
+            alpha = reco_jetspt[:,1]/ak.sum(leptons.pt,axis=1)
+            alpha = ak.fill_none(alpha,0)
+            reco_jets = reco_jets[alpha<alphaDY] #[:,:NjetsDY]
+            events = events[alpha<alphaDY]
 
     return reco_jets, events
 
