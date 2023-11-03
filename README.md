@@ -19,7 +19,7 @@ Load the `lcg` environment with the relevant packages including `coffea`
 source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh
 ```
 
-Follow the instruction of [installing](install-the-repo) the repo.
+Follow the instruction of [installing](#install-the-repo) the repo.
 
 ### Instructions for the **LPC** (and singularity)
 
