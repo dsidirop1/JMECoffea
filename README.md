@@ -18,10 +18,29 @@ Load the `lcg` environment with the relevant packages including `coffea`
 ```
 source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh
 ```
-Clone HTConodor wrapper for sending condor jobs through dask on lxplus 
-https://github.com/cernops/dask-lxplus
+
+Follow the instruction of [installing](install-the-repo) the repo.
+
+### Instructions for the **LPC** (and singularity)
+
+1. Inside the JMECoffea directory:
 ```
-git clone git@github.com:cernops/dask-lxplus.git
+wget https://raw.githubusercontent.com/CoffeaTeam/lpcjobqueue/main/bootstrap.sh
+bash bootstrap.sh
+./shell
+```
+2. Install the repo
+
+### Instructions for **Coffea Casa**
+
+1. Log into https://coffea.casa/hub/login?next=%2Fhub%2F with your CERN account
+2. Go to the "Git" menu and select "Clone a repository" 
+
+## Install the repo
+
+Clone the repo
+```
+git clone git@github.com:AndrissP/JMECoffea.git
 ```
 
 To get imports of the path work well, install the package in the editable state in a virtual environment. Explanation of this is here: https://stackoverflow.com/questions/714063/importing-modules-from-parent-folder/50194143#50194143:
@@ -35,37 +54,6 @@ Every time logging in, activate the virtual environment and after that load the 
 . venv/bin/activate
 source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh
 ```
-
-
-**Note** Unfortunatelly, lcg104 and nightlies that have the newest coffea (0.7.21) have a bug with dask. It does not allow running the jobs on the condor cluster. To make it work one needs to use the lch103 environment and install coffea 2.2.21 locally manually and put the path to the coffea by hand on top of the lcg environment path.
-Load the lcg environment.
-```
-. /cvmfs/sft.cern.ch/lcg/views/LCG_103/x86_64-centos7-gcc11-opt/setup.sh
-```
-
-Install coffea locally, choose path under `target`.
-```
-pip install --no-deps --target=. coffea
-```
-One might need to delete some dependancies that are installed but not needed.
-
-
-
-
-### Instructions for the **LPC** (and singularity)
-
-1. Clone the repository
-2. Inside the JMECoffea directory:
-```
-wget https://raw.githubusercontent.com/CoffeaTeam/lpcjobqueue/main/bootstrap.sh
-bash bootstrap.sh
-./shell
-```
-
-### Instructions for **Coffea Casa**
-
-1. Log into https://coffea.casa/hub/login?next=%2Fhub%2F with your CERN account
-2. Go to the "Git" menu and select "Clone a repository" 
 
 ## ssh port forwarding in to use `jupyter notebooks`:
 To use jupyter notebooks you have to log into lxplus using port forwarding
@@ -82,10 +70,6 @@ jupyter notebook --no-browser --port=8095
 Then copy the link in the output and connect in to your broswer, replacing the remote_port valur with local_port. Here you are mapping the port local_port (e.g 8099) of the localhost (your machine) to the port remote_port (e.g. 8095) of the remote server (lxplus.cern.ch). We assume that the two ports are free and therefore available.
 
 ## Running the code:
-Clone the repo
-```
-git clone git@github.com:AndrissP/JMECoffea.git
-```
 
 ### Running the L5 (or L2L3Rel) processors
 Run the histogram creation (for testing, change `test_run=True` under 'Parameters of the run and switches' in `run_processor.py`)
