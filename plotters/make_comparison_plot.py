@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.interpolate import CubicSpline
-from coffea import util
 from cycler import cycler
 import os
 import mplhep as hep
@@ -25,6 +24,7 @@ def make_comparison_plot(data_dict,
     For the legends and figure name the flavor `flav` and eta bin values with the index `etaidx` are used.
     '''
    
+    ########### Retreive the data from the dictionary and some logic with it ############
     keys = [key for key in data_dict.keys()]
     start = ptbins.get_bin_idx(20) if plotvspt else 0 #np.searchsorted(ptbins, 20, side='left')
     end = ptbins.nbins if plotvspt else etabins.nbins
@@ -35,49 +35,19 @@ def make_comparison_plot(data_dict,
     stds  = np.array([key[1][data_range] for key in data_dict.values()])
     reco_pts  = np.array([key[2][data_range] if len(key[2].shape)==2 else key[2][data_range] for key in data_dict.values()])
 
-#     if not plotvspt:
-#         yvals = yvals.T
-#         stds = stds.T
-#         reco_pts = reco_pts.T
-
     ### Replacing response values to corrections
     use_recopt=inverse
     if not plotvspt:
         use_recopt=False
         
-    bins = etabins if plotvspt else ptbins
-
-    # yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
     yvals[(yvals==0) | (np.abs(yvals)==np.inf)] = np.nan
-
-    fig = plt.figure()
-    gs = fig.add_gridspec(nrows=2, ncols=1, hspace=0, height_ratios=[3, 1])
-    ax = fig.add_subplot(gs[0])
-    ax2 = fig.add_subplot(gs[1])
-    
-    # Set up a new cycler to set up colors of the lines match to the colors of the points and all start with black
-    # , while for the ratio plot to start with the second marker and color
-    reset_colors = True ### if match the colors of the first points to the colors of the first lines
-    old_rc_cycler = plt.rcParams['axes.prop_cycle']
-    rc_bykey = old_rc_cycler.by_key()
-    for key in rc_bykey.keys():
-        if key=='color':
-            rc_bykey[key] = ['k']+rc_bykey[key]
-        else:
-            rc_bykey[key] = rc_bykey[key]+[rc_bykey[key][-1]]
-    new_cycler = cycler(**rc_bykey)
-    ax.set_prop_cycle(new_cycler)
-    
-    for axis in [ax.xaxis, ax.yaxis, ax2.xaxis, ax2.yaxis]:
-        axis.set_minor_locator(mpl.ticker.AutoMinorLocator())
+    bins = etabins if plotvspt else ptbins
 
     if plotvspt:
         xvals = reco_pts if use_recopt else np.array([ptbins.centres[start:end]]*len(yvals))
     else:
         xvals = np.array([etabins.centres[start:end]]*len(yvals))
     validx = (xvals>0)*(yvals>0)
-    # xvals_cont = {name: np.geomspace(np.min(xv[valx]), np.max(xv[valx]), 100)
-    #               for xv, valx, name in zip(xvals, validx, function_dict.keys())}
     
     linspacefun = np.geomspace if plotvspt else np.linspace
     if np.sum(validx) != 0:
@@ -105,12 +75,33 @@ def make_comparison_plot(data_dict,
         eta_str = r'{:0.2f}$<|\eta|<${:0.2f}'.format(etabins.edges[binidx], etabins.edges[binidx+1])
     else:
         eta_str = 'to be implemented'
+
+    ########### End of retreive the data from the dictionary and some logic with it ############
+
+    fig = plt.figure()
+    gs = fig.add_gridspec(nrows=2, ncols=1, hspace=0, height_ratios=[3, 1])
+    ax = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1])
+    
+    # Set up a new cycler to set up colors of the lines match to the colors of the points and all start with black
+    # , while for the ratio plot to start with the second marker and color
+    reset_colors = True ### if match the colors of the first points to the colors of the first lines
+    old_rc_cycler = plt.rcParams['axes.prop_cycle']
+    rc_bykey = old_rc_cycler.by_key()
+    for key in rc_bykey.keys():
+        if key=='color':
+            rc_bykey[key] = ['k']+rc_bykey[key]
+        else:
+            rc_bykey[key] = rc_bykey[key]+[rc_bykey[key][-1]]
+    new_cycler = cycler(**rc_bykey)
+
+    ############################ Start of the top plot ############################
+    ax.set_prop_cycle(new_cycler)
     p1 = ax.errorbar(xvals[0], yvals[0], yerr=stds[0], #marker='o',
                      capsize=1.6, capthick=0.7, linewidth=1.0,
     #                      markerfacecolor='none', markeredgewidth=1,
                      linestyle="none", label=keys[0]) #+', '+eta_str)
 
-    # markers = ['v','^','d', 'p']
     for xval, yval, name, std in zip(xvals[1:], yvals[1:], keys[1:], stds[1:]):
         ax.errorbar(xval, yval, yerr=std, #marker=marker,
                     capsize=1.6, capthick=0.7, linewidth=1.0,
@@ -119,7 +110,6 @@ def make_comparison_plot(data_dict,
     if reset_colors:
         ax.set_prop_cycle(new_cycler)
 
-#     assert False
     yvals_cont = {}
     yvals_spline = {}
     for name in function_dict.keys():
@@ -152,8 +142,7 @@ def make_comparison_plot(data_dict,
             ax.vlines(HCal_border,0, 2, linestyles='--',color="gray",
                 linewidth=1,)
 
-    # assert False
-
+    ############################ End of the top plot ############################
     ############################ Data ratio plot ######################################
     
     ax2.hlines(1,-10, 10000, linestyles='--',color="black", 
@@ -162,12 +151,6 @@ def make_comparison_plot(data_dict,
         for HCal_border in JERC_Constants.etaBinsEdges_Win14():
             ax2.vlines(HCal_border,0, 2, linestyles='--',color="gray",
                 linewidth=1,)
-
-
-#     else:
-#         ax2.hlines(1,-10, 10, linestyles='--',color="black",
-#             linewidth=1,)
-
     
     data_model_ratio = yvals/yvals[0]
     data_model_ratio_unc = stds / yvals[0]
@@ -215,9 +198,9 @@ def make_comparison_plot(data_dict,
         ax2.plot(xspline, yvals_spline[key]/y_spline, markersize=0)
 
     ax2.set_ylabel(ratio_name)
-    ax2.tick_params(axis="both", which="major", pad=8)
-    ax2.tick_params(direction="in", top=True, right=True, which="both")
-    fig.set_tight_layout(True)
+    # ax2.tick_params(axis="both", which="major", pad=8)
+    # ax2.tick_params(direction="in", top=True, right=True, which="both")
+    # fig.set_tight_layout(True)
 
     ######################## Calculate resonable limits excluding the few points with insane errors ############################
     if np.sum(validx) != 0:
@@ -236,15 +219,12 @@ def make_comparison_plot(data_dict,
         norm_pos = (yerr_norm<0.4) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         if ~np.any(norm_pos):
             print("Cannot determine ylimits")
-            # norm_pos = np.ones(len(yerr_norm), dtype=int)
         else:
             # raise Exception("Cannot determine ylimits")
             left_lim = np.min((y_norm-yerr_norm)[norm_pos])
             right_lim = np.max((yerr_norm+y_norm)[norm_pos])
             lim_pad = (right_lim - left_lim)/5
             ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
-            # print(f"normal pos = {norm_pos}")
-            # print(f"right lim = {right_lim}")
 
     if not ratio_ylim==None:
         ax2.set_ylim(ratio_ylim)
@@ -261,7 +241,6 @@ def make_comparison_plot(data_dict,
         ax2.set_xscale('log')
 
     xlims = ax.get_xlim()
-    # assert False
     ax.hlines(1,-10, 10000, linestyles='--',color="black",
               linewidth=1,)
 
@@ -281,12 +260,14 @@ def make_comparison_plot(data_dict,
     ### make the y-axis ticks in the ratio plot look nice: add a decent amount of major and minor ticks
     ax2.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5, steps=[1, 2, 5, 10]))
     ax2.yaxis.set_minor_locator(mpl.ticker.MaxNLocator(nbins=25, steps=[1, 2, 5, 10])) #mpl.ticker.LinearLocator(numticks=25)
-    ### remove the highest tick lavel from the ratio plot as it overlaps with the lowest label from the main plot
-    tick_labels = ax2.yaxis.get_major_locator().tick_values(ax2.get_ylim()[0], ax2.get_ylim()[1])    
+    ### remove the highest tick lavel from the ratio plot as it overlaps with the lowest label from the main plot 
+    tick_labels = ax2.get_yticks() 
     tick_labels = [f'{tick:.10g}' for tick in tick_labels]  ### remove floating point digits
     tick_labels = tick_labels[:-1]
+    ax2.set_yticks(ax2.get_yticks()[:-1])
     ax2.set_yticklabels(tick_labels)
 
+    ############################ Adding the CMS labels and saving the plots ######################################
     eta_string = bins.idx2str(binidx) #'_eta'+str(etabins_abs[etaidx])+'to'+str(etabins_abs[etaidx+1])
 #     eta_string = eta_string.replace('.','')
     fig_corr_name = 'corr' if inverse else 'med_resp'
@@ -315,22 +296,29 @@ def make_comparison_plot(data_dict,
     plt.show()
 
 
-from helpers import read_data as read_data_orig
-def read_data(mean_name, flav, tag1):
-    return read_data_orig(mean_name, flav, tag1, '../out_txt/')
+# from helpers import read_data as read_data_orig
 
-### Some recent file to get out the binning
-outname = '../out/CoffeaJERCOutputs_L5_QCD-Py.coffea'
-output = util.load(outname)
-etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
+from data_tools import read_or_recreate_data
+out_txt_path = '../out_txt'
+
+def read_data(mean_name, samp, tag1):
+    return read_or_recreate_data(mean_name, samp, tag1, out_txt_path)
+
+# def read_data(mean_name, flav, tag1):
+#     return read_data_orig(mean_name, flav, tag1, '../out_txt/')
+
+# Some recent file to get out the binning
+# outname = '../out/CoffeaJERCOutputs_L5_QCD-Py.coffea'
+# output = util.load(outname)
+# etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
 # etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
-etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
+# etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
     
-etabins_abs = etabins[(len(etabins)-1)//2:]
-etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
+# etabins_abs = etabins[(len(etabins)-1)//2:]
+# etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
 
 
-def make_double_ratio_plot(outputname1, outputname2, etaidx=0,
+def make_double_ratio_plot(outputname_num, outputname_denom, etaidx=0,
                             legend_names = ['Pythia', 'Herwig'],
                             etabins=JetEtaBins("HCalPart", absolute=True),
                             ptbins=PtBins("MC_truth"),
@@ -343,14 +331,14 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0,
     make it work with input parameters of ptbins and etabins, not the ones real at the top
     '''
         
-    median_1 = read_data("Median", flav, outputname1)
-    medianstd_1 = read_data("MedianStd", flav, outputname1)
-    median_2 = read_data("Median", flav+'bar', outputname1)
-    medianstd_2 = read_data("MedianStd", flav+'bar', outputname1)
-    median_3 = read_data("Median", flav, outputname2)
-    medianstd_3 = read_data("MedianStd", flav, outputname2)
-    median_4 = read_data("Median", flav+'bar', outputname2)
-    medianstd_4 = read_data("MedianStd", flav+'bar', outputname2)
+    median_1 = read_data("Median", flav, outputname_denom)
+    medianstd_1 = read_data("MedianStd", flav, outputname_denom)
+    median_2 = read_data("Median", flav+'bar', outputname_denom)
+    medianstd_2 = read_data("MedianStd", flav+'bar', outputname_denom)
+    median_3 = read_data("Median", flav, outputname_num)
+    medianstd_3 = read_data("MedianStd", flav, outputname_num)
+    median_4 = read_data("Median", flav+'bar', outputname_num)
+    medianstd_4 = read_data("MedianStd", flav+'bar', outputname_num)
 
         
     yvals_base = median_1
@@ -368,7 +356,7 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0,
     yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
 
     fig, ax2 = plt.subplots()
-    start = np.where(ptbins.centres<=20)[0][-1]
+    start = ptbins.get_bin_idx(20)
     xvals = ptbins.centres[start:]
 
     for axis in [ax2.xaxis, ax2.yaxis]:
@@ -457,7 +445,7 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0,
     ax2.tick_params(axis="both", which="major", pad=8)
     ax2.tick_params(direction="in", top=True, right=True, which="both")
 
-    fig.set_tight_layout(True)
+    # fig.set_tight_layout(True)
 
 
 
@@ -495,14 +483,10 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0,
     left_lim = np.min((y_norm-yerr_norm)[norm_pos])
     right_lim = np.max((yerr_norm+y_norm)[norm_pos])
     lim_pad = (right_lim - left_lim)/10
-    ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
+    ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad*2.5)
 
     ax2.set_xlabel(r'$p_T$ (GeV)');
-    # ax.set_ylabel(r'median response');
-    # ax.set_xscale('log')
     ax2.set_xscale('log')
-
-    # ax.set_xticks([])
 
     good_xlims = ax2.get_xlim()
 
@@ -515,7 +499,6 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0,
     leg1 = ax2.legend()
 
     eta_string = etabins.idx2str(etaidx) #r'{:0.2f}$<|\eta|<${:0.2f}'.format(etabins.edges[etaidx], etabins.edges[etaidx+1])
-    # eta_string = eta_string.replace('.','')
     hep.cms.label("Private work", loc=0, data=False, ax=ax2, rlabel='')
     # hep.cms.label("Preliminary", loc=0, data=False, ax=ax2)
     

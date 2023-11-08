@@ -69,7 +69,6 @@ def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, legenddict=None, sa
     ax.set_xscale('log')
     ax.set_xlabel('$p_{T,ptcl}$ (GeV)')
     ax.set_ylabel("Flavor fraction")
-# fig.suptitle("Blaaah $x^2_5$")
 
     xlims = ax.get_xlim()
 
@@ -102,7 +101,136 @@ def plot_Efractions(sampledict, etaidx, jeteta_bins, ptbins, legenddict=None, sa
         plt.savefig(fig_name+'.pdf');
         plt.savefig(fig_name+'.png');
 
-1;
+from helpers import hist_div, hist_add, hist_mult
+def plot_Efractions_ratio(sampledict, etaidx, jeteta_bins, ptbins, legenddict=None, saveplot=False):
+    samples = list(sampledict.keys())
+    ptbins_c = ptbins.centres
+    ptbins_e = ptbins.edges
+
+    ### Check that Herwig is the first sample and Pythia the second
+    if not ('Her' in samples[1] and 'Py' in samples[0]):
+        raise ValueError('key in the dictionary happened to get reversed')
+    
+    
+    qfracs0, qfrac_var0, spline0, spline2D0 = sampledict[samples[0]]
+    qfracs1, qfrac_var1, spline1, spline2D1 = sampledict[samples[1]]
+    
+    plot_range = range(0, np.searchsorted(ptbins_c,1250)) if 'DY' in "".join(samples) else range(0, np.searchsorted(ptbins_c,2750))
+    ptbins_c_plot = ptbins_c[plot_range]
+    
+    fig, (ax_main, ax_ratio) = plt.subplots(nrows=2, sharex=True, gridspec_kw={'height_ratios': [3, 1], 'hspace': 0})
+    xplot = np.geomspace(ptbins_c_plot.min() - (1), ptbins_c_plot.max(),1000)
+    xplot2 = np.geomspace(ptbins_c_plot.min(), ptbins_c_plot.max(),1000)
+    points_ls = []
+    for flav in qfracs0.keys():
+        lab = legend_dict_short[flav]
+#         mc = next(ax._get_lines.prop_cycler)
+
+        points = ax_main.errorbar(ptbins_c_plot, qfracs0[flav][plot_range, etaidx],
+                             yerr=np.sqrt(qfrac_var0[flav][plot_range, etaidx]),
+                             linestyle='none', label=lab,  **color_scheme[flav], capsize=1.6, capthick=0.7, linewidth=1.0)
+        points2 = ax_main.errorbar(ptbins_c_plot, qfracs1[flav][plot_range, etaidx],
+                              yerr=np.sqrt(qfrac_var1[flav][plot_range, etaidx]),
+                              linestyle='none', mfc='none', markeredgewidth=1.2, **color_scheme[flav], capsize=1.6, capthick=0.7, linewidth=1.0)
+
+        valid_fit_val = ~(np.isnan(qfracs1[flav]) | np.isinf(qfracs1[flav]) | (qfracs1[flav]==0))
+        
+        ax_main.plot(xplot2, spline2D0[flav]((np.log10(xplot2), np.repeat([jeteta_bins.centres[etaidx]],len(xplot2)))),
+                      '-.', markersize=0, **color_scheme[flav], linewidth=1.0)
+        ax_main.plot(xplot2, spline2D1[flav]((np.log10(xplot2), np.repeat([jeteta_bins.centres[etaidx]],len(xplot2)))),
+              '-.', markersize=0, **color_scheme[flav], linewidth=1.0)
+# interp((np.log(np.arange(20,60,2)),[1]*20))
+        if list(qfracs0.keys())[0] == flav:
+            points_ls.append(points[0])
+            points_ls.append(points2[0])
+        
+    
+    ax_main.set_xscale('log')
+    # ax_main.set_xlabel('$p_{T,ptcl}$ (GeV)')
+    ax_main.set_ylabel("Flavor fraction")
+
+    xlims = ax_main.get_xlim()
+
+    ax_main.set_xticks([])
+    ax_main.set_xticks([10, 20, 50, 100, 200, 500, 1000, 2000, 5000])
+    ax_main.get_xaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+    # ax.get_yaxis().set_major_formatter(mpl.ticker.ScalarFormatter())
+    legend_labs = [legenddict[samples[0]], legenddict[samples[1]] ] if legenddict is not None else [samples[0], samples[1]]
+    legend1 = ax_main.legend(points_ls, legend_labs, loc="upper left", bbox_to_anchor=(0.56, 1))
+    leg2 = ax_main.legend(ncol=1, loc='upper left', bbox_to_anchor=(0.42, 1))
+    ax_main.add_artist(legend1)
+    # ax.add_artist(leg2)
+
+    ylims = ax_main.get_ylim()
+    ax_main.set_xlim(xlims)
+    ax_main.set_ylim(ylims[0], ylims[1]*1.3)
+
+    # ax.yaxis.get_ticklocs(minor=True)
+    ax_main.minorticks_on()
+    hep.cms.label("Private work", loc=0, data=False, ax=ax_main, rlabel='')
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax, rlabel='')
+    hep.label.exp_text(text=jeteta_bins.idx2plot_str(etaidx), loc=2, ax=ax_main)
+
+    #### Ratio plot
+    wd = np.diff(ptbins_e[range(plot_range[0], plot_range[-1]+2)])
+    ax_ratio.hlines(1,-10, 10000, linestyles='--',color="black", 
+               linewidth=1,)
+    
+    ratio = hist_div(qfracs1, qfracs0)
+    ratio_unc_central = hist_div(qfrac_var0, hist_mult(qfracs0, qfracs0))
+    ratio_unc_points = hist_div(qfrac_var1, hist_mult(qfracs0, qfracs0))
+    ratio_unc = hist_add(ratio_unc_central, ratio_unc_points)
+    # ratio_unc_points = hist_div(qfrac_var1, qfracs0)
+    # data_model_ratio = yvals/yvals[0]
+    # data_model_ratio_unc = stds / yvals[0]
+
+    # for flav in qfracs0.keys():
+    #     non_nan_ratio = ~np.isnan(ratio_unc_central[flav][plot_range, etaidx])
+    #     ax_ratio.bar(
+    #         ptbins_c_plot[non_nan_ratio],
+    #         2 * np.sqrt(ratio_unc_central[flav][plot_range, etaidx][non_nan_ratio]),
+    #         width=wd[non_nan_ratio],
+    #         bottom=1.0 - np.sqrt(ratio_unc_central[flav][plot_range, etaidx][non_nan_ratio]),
+    #         fill=False,
+    #         linewidth=0,
+    #         edgecolor=color_scheme[flav]['color'],
+    #         hatch=10 * "/",
+    #         # **color_scheme[flav],
+    #     )
+
+    for flav in qfracs0.keys():
+        ax_ratio.errorbar(
+            ptbins_c_plot,
+            ratio[flav][plot_range, etaidx], #[nonzero_model_yield],
+            yerr=np.sqrt(ratio_unc[flav][plot_range, etaidx]), #[nonzero_model_yield],
+            linestyle="none",
+            capsize=1.6, capthick=0.7, linewidth=1.0,
+            mfc='none', markeredgewidth=1.2,
+            **color_scheme[flav],
+            #fmt=marker,
+        )
+
+    ax_ratio.set_ylim((0.5,1.5))
+    ### make the y-axis ticks in the ratio plot look nice: add a decent amount of major and minor ticks
+    ax_ratio.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5, steps=[1, 2, 5, 10]))
+    ax_ratio.yaxis.set_minor_locator(mpl.ticker.MaxNLocator(nbins=25, steps=[1, 2, 5, 10])) #mpl.ticker.LinearLocator(numticks=25)
+    ### remove the highest tick lavel from the ratio plot as it overlaps with the lowest label from the main plot 
+    tick_labels = ax_ratio.get_yticks() 
+    tick_labels = [f'{tick:.10g}' for tick in tick_labels]  ### remove floating point digits
+    tick_labels = tick_labels[:-1]
+    ax_ratio.set_yticks(ax_ratio.get_yticks()[:-1])
+    ax_ratio.set_yticklabels(tick_labels)
+    ax_ratio.set_xlabel('$p_{T,ptcl}$ (GeV)')
+
+    ax_ratio.set_ylabel("Her7/Py8")
+    if saveplot:
+        if not os.path.exists("fig/fractions"):
+            os.mkdir("fig/fractions")
+
+        fig_name = 'fig/fractions/fraction'+"".join(samples)
+        print("Saving plot with the name = ", fig_name)
+        plt.savefig(fig_name+'.pdf');
+        plt.savefig(fig_name+'.png');
 
 
 def plot_spectra(histdict, labels, flav, etaidx, jeteta_bins, ptbins, saveplot=True, plotvspt=True):
@@ -117,11 +245,13 @@ def plot_spectra(histdict, labels, flav, etaidx, jeteta_bins, ptbins, saveplot=T
     ax = fig.add_subplot(gs[0])
     ax2 = fig.add_subplot(gs[1])
 
+    Neff = {samp: histdict[samp][flav].sum().value**2/(histdict[samp][flav].sum().variance) for samp in samples}
     if plotvspt:
-        spectra = {samp: histdict[samp][flav][:,sum]/histdict[samp][flav].sum()['value'] for samp in samples}
+        spectra = {samp: histdict[samp][flav][:,sum] for samp in samples}
     else:
-        spectra = {samp: histdict[samp][flav][sum,:]/histdict[samp][flav].sum()['value'] for samp in samples}
-    spectra['QCD-Py_weights'] = spectra['QCD-Py_weights']
+        spectra = {samp: histdict[samp][flav][sum,:] for samp in samples}
+    spectra['QCD-Py_weights'] = spectra['QCD-Py_genwt_test']
+    # for key in ['QCD-Py_genwt', 'QCD-Py']:
 #     pt_spectrumPy = histsPy[flav][:,sum]
 #     pt_spectrumHer = histsHer[flav][:,sum]
 #     ed = pt_spectrum.axes[0].edges

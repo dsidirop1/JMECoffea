@@ -175,6 +175,7 @@ def save_data(data, name, flavor, tag, ptbins_centres, etabins, path='out_txt'):
 
     df = pd.DataFrame(data=data_dict)
     df = df.set_index('etaBins')
+    print('Saving data under: '+path+'/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
     df.to_csv(path+'/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
 
 def read_data(name, flavor, tag, path='out_txt'):
@@ -261,7 +262,7 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
     Perform the second and further fits around the mean+/-<sigma_fit_window>*std of the previous fit.
 
     '''
-    if_failed = False   #save if the fit failed or converged
+    status = 1   #save if the fit failed or converged
     
     xvals = histo.axes[0].centers
     yvals = histo.values()
@@ -280,7 +281,7 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
         chi2 = np.nan
         cov = np.array([[np.nan]*3]*3)
         Ndof = 0
-        if_failed = True
+        status = -1
         xfit_l, xfit_h = [0, len(xvals)-1]
     else:
         try:
@@ -316,10 +317,10 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
             chi2 = np.nan
             cov = np.array([[np.nan]*3]*3)
             Ndof = 0
-            if_failed = True
+            status = 0
             xfit_l, xfit_h = [0, len(xvals)-1]
             
-    return [p, cov, chi2, Ndof, if_failed, [xfit_l, xfit_h]]
+    return [p, cov, chi2, Ndof, status, [xfit_l, xfit_h]]
 
 
 barable_flavors = ['b', 'c', 's', 'u', 'd', 'ud', 'q']
@@ -373,12 +374,15 @@ def gauss(x, *p):
     A, mu, sigma = p
     return A*np.exp(-(x-mu)**2/(2.*sigma**2))
 
+import os
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
 def get_xsecs_filelist_from_file(file_path, data_tag, test_run=False):
-    with open(file_path) as f:
+    with open(script_dir+'/'+file_path) as f:
         lines = f.readlines()
     lines_split = [line.split() for line in lines]
     if test_run:
-        lines_split = lines_split[:3]  
+        lines_split = lines_split #[:3]  
     xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
     file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
     return xsec_dict, file_dict
@@ -407,10 +411,11 @@ def get_xsec_dict(data_tag, dataset_dictionary):
         if (dataset is None) and (xsec is not None):
             xsec_dict, file_dict = get_xsecs_filelist_from_file(xsec, matching_key)
         else:
-            xsec_dict = {matching_key: 1}
+            xsec_dict = {matching_key: xsec}
         legend_label = label
     else:
-        xsec_dict = {data_tag: 1}
+        dataset, xsec, label = dataset_dictionary[matching_key]
+        xsec_dict = {data_tag: xsec}
         legend_label = data_tag
         
     return xsec_dict, legend_label

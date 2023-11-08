@@ -1,10 +1,10 @@
 #!/usr/bin/env python
     # coding: utf-8
 
-import sys
-coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
-if coffea_path not in sys.path:
-    sys.path.insert(0,coffea_path)
+# import sys
+# coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
+# if coffea_path not in sys.path:
+#     sys.path.insert(0,coffea_path)
 
 # ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
 
@@ -21,55 +21,42 @@ import warnings
 
 from plotters.pltStyle import pltStyle
 pltStyle(style='hep') #, font_frac=1.40
-plt.rcParams['figure.subplot.left'] = plt.rcParams['figure.subplot.left']*1.3
+plt.rcParams['figure.subplot.left'] = plt.rcParams['figure.subplot.left']*1.4
 # plt.rcParams['font.size'] = plt.rcParams['font.size']/0.98
 plt.rcParams['figure.dpi'] = 150
 import os
 
 ### import subpackages
 import helpers as h
-import plotters.plotters as plotters
+import plotters.plot_makers as plot_makers
 # from common_binning import JERC_Constants
 from fileNames.available_datasets import dataset_dictionary
 from plotters.plot_cutflow import plot_cutflow
 
-def main(data_tag='Pythia-TTBAR'):
-    # The script fits the response histograms (or calculates the medians) and creates the `txt` files with the fit results (one fle for each `Mean`, `MeanStd`, `Median`, `MedianStd`, `MeanRecoPt`)
+def fit_response_distributions(data_tag='Pythia-TTBAR', config=None):
+    ''' The script fits the response histograms (or calculates the medians) and creates the `txt` files with the fit results
+    (one file for each `Mean`, `MeanStd`, `Median`, `MedianStd`, `MeanRecoPt`)
+    '''
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.realpath(__file__))
 
-    ################ Parameters of the run and switches  #########################
-    test_run            = False   ### True check on a file that was created with a processor with `test_run=True` (maybe obsolete because this can be specified just in the data_tag)
-    load_fit_res        = False   ### True if only replot the fit results without redoing histogram fits (also kind of obsolete because plotting scripts exist in `plotters` )
-    saveplots           = False    ### True if save all the response distributions. There are many eta/pt bins so it takes time and space
-    combine_antiflavour = True    ### True if combine the flavor and anti-flavour jets into one histogram
-    
-    ### Choose eta binning for the response fits.
-    ### HCalPart: bin in HCal sectors, CaloTowers: the standard JERC binning,
-    ### CoarseCalo: like 'CaloTowers' but many bins united; onebin: combine all eta bins
-    ### Preprocessing always done in CaloTowers. For the reponse distributions, the bins can be merged.
-    eta_binning  = "HCalPart"  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
-    sum_neg_pos_eta_bool=True  ### if combining the positive and negative eta bins
-    tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
-    
-    ### Define the dataset either by using a `data_tag` available in `dataset_dictionary`
-    ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
-    ### Or manually by defining `fileslist` as the list with file names.
-    ### data_tag will be used to name output figures and histograms.
-    # data_tag = 'Herwig-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
-    # data_tag = 'DY-FxFx'
-    ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag:str = ''   
-    ### if the fit strategy changed and the results need to be stored with a different name
-    fit_tag:str = ''   
+    if config is None:
+        config = {}
 
-
-    ### Define which flavors should be fit
-    flavors = ['b', 'ud', 'all', 'g', 'c', 's', 'q', 'u', 'd', 'unmatched']
-    # flavors = ['all']
-
-    ### None if all the pt bins should be fit, otherwise a list of two numbers for the range of pt bins to fit, or just one number for a single pt bin
-    pt_to_fit: list = None
-    # pt_to_fit: list = [30]
-    eta_to_fit: list = None
+    # Use the dictionary values, or the defaults if they are not in the dictionary
+    test_run = config.get('test_run', False)
+    load_fit_res = config.get('load_fit_res', False)
+    saveplots = config.get('saveplots', False)
+    combine_antiflavour = config.get('combine_antiflavour', False)
+    eta_binning = config.get('eta_binning', 'HCalPart')
+    pt_binning = config.get('pt_binning', 'MC_truth')
+    sum_neg_pos_eta_bool = config.get('sum_neg_pos_eta_bool', True)
+    tag_Lx = config.get('tag_Lx', '_L5')
+    add_tag = config.get('add_tag', '')
+    fit_tag = config.get('fit_tag', '')
+    flavors = config.get('flavors', ['b', 'ud', 'all', 'g', 'c', 's', 'q', 'u', 'd', 'unmatched'])
+    pt_to_fit = config.get('pt_to_fit', None)
+    eta_to_fit = config.get('eta_to_fit', None)
 
     ################ End of the parameters of the run and switches  #########################
     # ### Do some logic with the input partameters and the rest of parameters of the run
@@ -77,27 +64,29 @@ def main(data_tag='Pythia-TTBAR'):
     tag_full = tag_Lx+'_'+data_tag+add_tag
     if test_run:
         tag_full = tag_full+'_test'
-    outname = 'out/CoffeaJERCOutputs'+tag_full+'.coffea'
+    outname = os.path.join(script_dir, 'out', 'CoffeaJERCOutputs'+tag_full+'.coffea')
     
     tag_fit_res = tag_full
     
     if eta_binning != "HCalPart":
         tag_fit_res=tag_full+'_'+eta_binning
+    if pt_binning != "MC_truth":
+        tag_fit_res=tag_fit_res+'_pt-'+pt_binning
     combine_antiflavour_txt = '_split_antiflav' if not combine_antiflavour else ''
     tag_fit_res += combine_antiflavour_txt+fit_tag
 
-    if not os.path.exists("out"):
-        os.mkdir("out")
+    # if not os.path.exists("out"):
+    #     os.mkdir("out")
             
-    if not os.path.exists("fig"):
-        os.mkdir("fig/")
-        os.mkdir("fig/responses/")
+    fig_path = os.path.join(script_dir, 'fig')
+    if not os.path.exists(fig_path):
+        os.mkdir(fig_path)
         
-    if test_run and not os.path.exists("test"):
-        os.mkdir("test/")
-        os.mkdir("test/fig")
+    if test_run and not os.path.exists(script_dir+"/test"):
+        os.mkdir(script_dir+"/test/")
+        os.mkdir(script_dir+"/test/fig")
         
-    out_txt_path = "out_txt" if not test_run else "test/out_txt"
+    out_txt_path = script_dir+"/out_txt" if not test_run else script_dir+"/test/out_txt"
     if not os.path.exists(out_txt_path):
         os.mkdir(out_txt_path)
 
@@ -122,7 +111,7 @@ def main(data_tag='Pythia-TTBAR'):
     from JetEtaBins import JetEtaBins, PtBins
     
     jeteta_bins = JetEtaBins(eta_binning)
-    pt_bins = PtBins("MC_truth")
+    pt_bins = PtBins(pt_binning)
     fiteta_bins = JetEtaBins(eta_binning, absolute=True) if sum_neg_pos_eta_bool else jeteta_bins
 
     if pt_to_fit is None:
@@ -166,6 +155,9 @@ def main(data_tag='Pythia-TTBAR'):
         
         response_hist = h.rebin_hist(response_hist, 'jeteta' , jeteta_bins.edges)
         recopt_hist = h.rebin_hist(recopt_hist, 'jeteta' , jeteta_bins.edges)
+
+        response_hist = h.rebin_hist(response_hist, 'pt_gen' , pt_bins.edges)
+        recopt_hist = h.rebin_hist(recopt_hist, 'pt_gen' , pt_bins.edges)
         
         if sum_neg_pos_eta_bool==True:
             response_hist = h.sum_neg_pos_eta(response_hist)
@@ -174,10 +166,11 @@ def main(data_tag='Pythia-TTBAR'):
         results = {key:np.zeros((pt_bins.nbins, fiteta_bins.nbins))
                       for key in ["Mean", "MeanStd", "Median", "MedianStd", "MeanRecoPt"]  }
                                 
-        N_converge = 0
-        N_not_converge = 0
+        N_converged = 0
+        N_little_ev = 0
+        N_failed = 0
     
-        FitFigDir1 = 'fig/responses/responses'+tag_full
+        FitFigDir1 = fig_path+'/responses/responses'+tag_full
         if saveplots and not os.path.exists(FitFigDir1):
             os.mkdir(FitFigDir1)
         
@@ -188,7 +181,7 @@ def main(data_tag='Pythia-TTBAR'):
             print("Response fits will be saved under ", FitFigDir)
         elif not saveplots:
             print("Response fits won't be saved")
-    
+        
         for i in pt_bins_to_fit:
             for k in eta_bins_to_fit:
                 if not scaled_hist==None:
@@ -211,11 +204,14 @@ def main(data_tag='Pythia-TTBAR'):
                 mean_reco_pt = histopt.value/np.sum(histo.values())
                 
                 ####################### Fitting ############################
-                p2, cov, chi2, Ndof, if_failed, fitlims = h.fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5)
-                if if_failed:
-                    N_not_converge += 1
+                p2, cov, chi2, Ndof, status, fitlims = h.fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5)
+                if status == 1:
+                    N_converged += 1
+                elif status == -1:
+                    N_little_ev += 1
                 else:
-                    N_converge += 1
+                    N_failed += 1
+                    
                 
                 ####################### Store the results ############################
                 results["Mean"][i,k] = p2[1]
@@ -234,13 +230,14 @@ def main(data_tag='Pythia-TTBAR'):
                                      + '\n'+r'Median = {0:0.3f}$\pm${1:0.3f}'.format(median, medianstd)
                                      + '\n'+r'$\chi^2/ndof$ = {0:0.2g}/{1:0.0f}'.format(chi2, Ndof)
                                      + '\n'+r'Neff = {0:0.3g}'.format(Neff))
-                    plotters.plot_response_dist(histo, p2, fitlims,
+                    plot_makers.plot_response_dist(histo, p2, fitlims,
                                        figName, dataset_name=legend_label, hep_txt=hep_txt, txt2print=txt2print, print_txt=True)              
                     if not scaled_hist==None:
-                        plotters.plot_response_dist_stack(h_stack, p2, fitlims,
+                        plot_makers.plot_response_dist_stack(h_stack, p2, fitlims,
                                                  figName+'stack', hep_txt=hep_txt, print_txt=False )
     
-        print("N converge = ", N_converge, "N_not_converge = ", N_not_converge );
+        print("fit summary: ")
+        print(f"N bins converged = {N_converged}; N bins not fit because of too little data = {N_little_ev}; N bins not converged = {N_failed}")
         warnings.filterwarnings('default')
         
         return results  
@@ -262,7 +259,7 @@ def main(data_tag='Pythia-TTBAR'):
             result = {}
             keys = ["Mean", "MeanStd", "Median", "MedianStd", "MeanRecoPt"] 
             for key in keys:
-                result[key] = h.read_data(key, flav, tag_fit_res)
+                result[key] = h.read_data(key, flav, tag_fit_res, out_txt_path)
         
         else:
             result = fit_responses(hists_merged, flav, saveplots=saveplots) #scaled_hist
@@ -277,10 +274,10 @@ def main(data_tag='Pythia-TTBAR'):
         # medianStd = result["MedianStd"] 
         # meanstd = np.sqrt(result["MeanStd"])
                 
-        if eta_binning=="one_bin": #or fine_etabins:
-            plotters.plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins, fiteta_bins.centres, tag_fit_res, flav, plotptvals=[20, 35, 150, 400])
+        if eta_binning=="onebin": #or fine_etabins:
+            plot_makers.plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins, fiteta_bins.centres, tag_fit_res, flav, plotptvals=[20, 35, 150, 400])
         else:
-            plotters.plot_corrections(result, pt_bins.centres, fiteta_bins, tag_fit_res, flav, plotetavals=[0, 1.305, 2.5, 3.139], plotmean=True)
+            plot_makers.plot_corrections(result, pt_bins.centres, fiteta_bins, tag_fit_res, flav, plotetavals=[0, 1.305, 2.5, 3.139], plotmean=True)
     #         plotters.plot_corrections_eta(result["Median"], result["MedianStd"], pt_bins, fiteta_bins.centres, tag_fit_res, flav, plotptvals=[20, 35, 150, 400])
     
 
@@ -312,10 +309,49 @@ def main(data_tag='Pythia-TTBAR'):
 if __name__ == "__main__":
     # data_tags = ['Pythia-TTBAR', 'Herwig-TTBAR', 'QCD-MG-Py', 'QCD-MG-Her', 'QCD-Py', 'DY-MG-Py', 'DY-MG-Her']
     # data_tags = ['Pythia-TTBAR_iso_dr_0p8','Pythia-TTBAR_iso_dr_1p2', 'Pythia-TTBAR_iso_dr_1p5'] #Pythia-semilep-TTBAR
-    # data_tags = ['scaled_times2_pion', 'scaled_times5_pion', 'scaled_times10_pion', 'scaled_pion', 'not_scaled_pion'] #Pythia-semilep-TTBAR
+    data_tags = ['scaled_times10_pion', 'scaled_pion', 'not_scaled_pion'] #Pythia-semilep-TTBAR
     # data_tags = ['scaled_times2_pion', 'scaled_times5_pion', 'scaled_times10_pion', 'scaled_pion', 'not_scaled_pion'] #Pythia-semilep-TTBAR
 
-    data_tags = ['QCD-Py_leading_gen_jet',] # 'Pythia-non-semilep-TTBAR', 'DY-MG-Py', 'QCD-MG-Py' Pythia-semilep-TTBAR
+    # data_tags = ['QCD-Py_noiso'] # , 'Pythia-TTBAR_100files_noiso', 'DY-MG-Py_noiso', 'QCD-MG-Py_noiso'] # 'Pythia-non-semilep-TTBAR', 'DY-MG-Py', 'QCD-MG-Py' Pythia-semilep-TTBAR
     # data_tags = ['QCD-Py', 'Pythia-semilep-TTBAR', 'DY-MG-Py' ] #Pythia-semilep-TTBAR
+
+    config = {
+         ################ Parameters of the run and switches  #########################
+        "test_run"            : False,   ### True check on a file that was created with a processor with `test_run=True` (maybe obsolete because this can be specified just in the data_tag)
+        "load_fit_res"        : False,   ### True if only replot the fit results without redoing histogram fits (also kind of obsolete because plotting scripts exist in `plotters` )
+        "saveplots"           : True,    ### True if save all the response distributions. There are many eta/pt bins so it takes time and space
+        "combine_antiflavour" : False,    ### True if combine the flavor and anti-flavour jets into one histogram
+        
+        ### Choose eta binning for the response fits.
+        ### HCalPart: bin in HCal sectors, CaloTowers: the standard JERC binning,
+        ### CoarseCalo: like 'CaloTowers' but many bins united; onebin: combine all eta bins
+        ### Preprocessing always done in CaloTowers. For the reponse distributions, the bins can be merged.
+        "eta_binning"         : "HCalPart",  ### HCalPart, CoarseCalo, JERC, CaloTowers, Summer20Flavor, onebin;
+        "pt_binning"          : "onebin", ### MC_truth, Uncert, Coarse, onebin
+        "sum_neg_pos_eta_bool": True,  ### if combining the positive and negative eta bins
+        "tag_Lx" : '_L5',                 ### L5 or L23, but L23 not supported since ages.
+        
+        ### Define the dataset either by using a `data_tag` available in `dataset_dictionary`
+        ### Or manualy by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
+        ### Or manually by defining `fileslist` as the list with file names.
+        ### data_tag will be used to name output figures and histograms.
+        # data_tag = 'Herwig-TTBAR' # 'QCD-MG-Her' #'Herwig-TTBAR' 
+        # data_tag = 'DY-FxFx'
+        ### name of the specific run if parameters changed used for saving figures and output histograms.
+        "add_tag":             '',   
+        ### if the fit strategy changed and the results need to be stored with a different name
+        "fit_tag":              '',   
+
+
+        ### Define which flavors should be fit
+        # "flavors":                ['b', 'ud', 'all', 'g', 'c', 's', 'q', 'u', 'd', 'unmatched'],
+        "flavors": ['b'],
+
+        ### None if all the pt bins should be fit, otherwise a list of two numbers for the range of pt bins to fit, or just one number for a single pt bin
+        "pt_to_fit": None,
+        # pt_to_fit: list = [30]
+        "eta_to_fit": [0],
+    }
+
     for data_tag in data_tags:
-        main(data_tag=data_tag)
+        fit_response_distributions(data_tag=data_tag, config=config)

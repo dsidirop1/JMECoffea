@@ -24,7 +24,7 @@ dataset_dictionary = {
     "QCD-MG-Py":    [None, 'fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt', 'QCD MG+Py8'],
     # "QCD-MG-Her":   [None, 'fileNames/QCD_MG_Py8_20UL18/xsecs_QCD_MG_py8.txt', 'QCD MG+Her7'],
     "QCD-MG-Her":   [None, 'fileNames/QCD_Herwig_20UL18/xsecs_QCD_Herwig_corrected.txt', 'QCD MG+Her7'],
-    "QCD-Py":       ['fileNames/QCD20UL18_JMENano.txt', 1, 'QCD Py8'],
+    "QCD-Py":       ['fileNames/QCD20UL18_JMENano.txt', 1373000000, 'QCD Py8'],
     "DY-FxFx":      ['fileNames/DYJets.txt', 1, 'ZJets FxFx'],
     "noJME-QCD-Py_pu": ['fileNames/fileNames_QCD20UL18.txt', 1, 'QCD Py8'],
     "scaled_pion_kaon": ['fileNames_pion_response/fileNames_scaled_pion_kaon.txt', 1, 'pion up/ kaon up'],

@@ -63,6 +63,15 @@ class JERC_Constants():
     def ptBinsEdgesMCTruth():
         return [15.0, 17.0, 20.0, 23.0, 27.0, 30.0, 35.0, 40.0, 45.0, 57.0, 72.0, 90.0, 120.0, 150.0, 200.0, 300.0, 400.0, 550.0, 750.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0, 4500.0, 5000.0, 10000]
 
+    @staticmethod
+    def ptBinsEdgesMCTruthCoarse():
+        return [15.0, 20.0, 40.0, 120.0, 400.0, 1000.0, 3000.0, 10000]
+
+
+    @staticmethod
+    def ptBinsEdges_onebin():
+        return [15.0, 10000]
+    
     # @staticmethod
     # def ptBinsEdgesMCTruth17():
     #     return [17.0, 20.0, 23.0, 27.0, 30.0, 35.0, 40.0, 45.0, 57.0, 72.0, 90.0, 120.0, 150.0, 200.0, 300.0, 400.0, 550.0, 750.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0, 3500.0, 4000.0, 4500.0, 5000.0]
@@ -111,7 +120,9 @@ class JERC_Constants():
     def StrToPtBinsDict():
        return {"MC_truth": JERC_Constants().ptBinsEdgesMCTruth(),
                # "MC_truth17": JERC_Constants().ptBinsEdgesMCTruth17(),
-               "Uncert": JERC_Constants().ptBinsEdges_Uncert()}
+               "Uncert": JERC_Constants().ptBinsEdges_Uncert(),
+               "Coarse": JERC_Constants().ptBinsEdgesMCTruthCoarse(),
+               "onebin": JERC_Constants().ptBinsEdges_onebin(),}
 
     @staticmethod
     def str2bins(bin_string, absolute=True):

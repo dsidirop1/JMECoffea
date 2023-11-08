@@ -142,6 +142,7 @@ class Processor(processor.ProcessorABC):
         cutflow_axis = hist.axis.StrCategory([], growth=True, name="cutflow", label="Cutflow Scenarios")
         output['cutflow_events'] = hist.Hist(cutflow_axis, storage="weight", label="N events")
         output['cutflow_jets'] = hist.Hist(cutflow_axis, storage="weight", label="N jets")
+        output['sum_weights'] = hist.Hist(cutflow_axis, storage="weight", label="sum of weights")
 
         dataset = events.metadata['dataset']
     
@@ -254,11 +255,13 @@ class Processor(processor.ProcessorABC):
         
         ptresponse_np = jetpt / gen_jetpt #/ self.closure_corr[correction_pos_pt, correction_pos_eta]
         
+        if 'LHEWeight' not in selectedEvents.fields: ### no LHEWeight.originalXWGTUP stored in standalone Pythia8 but Generator.weight instead
+            gen_weights = selectedEvents.Generator.weight
+        else:
+            gen_weights = selectedEvents.LHEWeight.originalXWGTUP
+        
         if self.cfg["use_gen_weights"]:
-            if 'LHEWeight' not in selectedEvents.fields: ### no LHEWeight.originalXWGTUP stored in standalone Pythia8 but Generator.weight instead
-                weights = selectedEvents.Generator.weight
-            else:
-                weights = selectedEvents.LHEWeight.originalXWGTUP
+            weights = gen_weights
         else:
             weights = np.ones(len(selectedEvents))
 
@@ -313,7 +316,7 @@ class Processor(processor.ProcessorABC):
                                                  weight=jetpts[flav]*weights_jet[flav]
                                                 )
         # self.for_memory_testing()
-
+        output['sum_weights'].fill(cutflow='sum_weights', weight=ak.sum(gen_weights))
         # allflav = [key for key in output.keys() if 'ptresponse' in key]
         # print(f"len iso jets  =  { sum([output[key].sum().value for key in allflav]) }.")
         # print(f"sum weights  =  { sum([output[key].sum().value for key in allflav]) }.")

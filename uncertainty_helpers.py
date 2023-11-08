@@ -20,10 +20,11 @@ def sum_output(output, data_tag, xsec_dict):
     '''
     
     keys = output.keys()
-    Nev = {key: output[key]['cutflow']['all_events'].value for key in keys}
+    Neff = {key: output[key]['cutflow_events']['all_events'].value if 'genwt' not in data_tag else output[key]['sum_weights']['sum_weights'].value for key in keys}
+    # Nev = {key: output[key]['cutflow_events']['all_events'].value for key in keys}
     # response_sums = {key:sum(dictionary_pattern(output[key], "ptresponse_").values()).sum().value for key in output.keys()}
     # scale_factors = {key:1 for key in output.keys()} #hist_div(xsec_dict, Nev)
-    scale_factors = hist_div(xsec_dict, Nev)
+    scale_factors = hist_div(xsec_dict, Neff)
     all_histo_keys = output[next(iter(output.keys()))].keys()
     hists_merged = {histo_key:sum_subhist(output, histo_key, scale_factors) for histo_key in all_histo_keys }  
     return hists_merged

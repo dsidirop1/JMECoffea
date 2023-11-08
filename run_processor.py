@@ -2,42 +2,6 @@
     # coding: utf-8
 ### run_processor.py
 
-# The file is a wrapper for running a coffea processor defined under `processor_name`.
-# The jobs can be run using iterative (futures) executors or parralel (dask) executors either on condor (on lxplus) or Coffea Casa. See, under `Parameters of the run and switches`.
-# The default processor is `CoffeaJERCProcessor_L5.py`. It creates histograms of jet reponses and reco jet $p_T$.
-# The results are stored outname='out/CoffeaJERCOutputs'tag_Lx+'_'+data_tag+add_tag'.coffea' for the default processor or in 'out/'+processor_name+tag_full+'.coffea' for the other processors.
-# 
-# At the moment, since dask+condor can still sometimes be unstable, for producing the flavor uncertatinties, where one needs to obtain the results from neccessary 6 datasets neccessary,
-# the script has to be run once for each of them (QCD stiching is done automatically).
-# However, this can and should be united in the future.
-# The jobs are to be run over files in the NanoAOD. Some predefined datasets are listed in `fileNames/available_datasets.py`. 
-# The dataset for the run can be chosen with a corresponding `data_tag` or by providing a path to the .txt file with the file names (without the redirectors) in `dataset`.
-# For small local testing dataset can be also specified as a list of files in `fileslist`.
-
-# # Dask Setup:
-# ---
-# ### For Dask+Condor setup on lxplus
-# #### 1.) The wrapper needs to be installed following https://github.com/cernops/dask-lxplus
-# #### 2.) Source lcg environment in bash
-# #### `source /cvmfs/sft-nightlies.cern.ch/lcg/views/dev4/latest/x86_64-centos7-gcc11-opt/setup.sh`
-# #### Singularity could work but not confirmed.
-# ---
-# ### For Coffea-Casa, the client must be specified according to the user that is logged into the Coffea-Casa Environment.
-# #### 1.) go to the left of this coffea-casa session to the task bar and click the orange-red button; it will say "Dask" if you hover your cursor over it
-# #### 2.) scroll down to the blue box where it shows the "Scheduler Address"
-# #### 3.) write that full address into the dask Client function 
-# #### Example: `client = Client("tls://ac-2emalik-2ewilliams-40cern-2ech.dask.coffea.casa:8786")`
-# ---
-# ### For CMSLPC, the client must be specified with the LPCCondorCluster
-# #### 1.) follow installation instructions from https://github.com/CoffeaTeam/lpcjobqueue, if you have not already done so, to get a working singularity environment with access to lpcjobqueue and LPCCondorCluster class
-# #### 2.) import LPCCondorCluster: `from lpcjobqueue import LPCCondorCluster`
-# #### 3.) define the client
-# #### Example: 
-# `cluster = LPCCondorCluster()`
-# 
-# `client = Client(cluster)`
-# 
-
 
 # ### Imports 
 # import sys
@@ -78,11 +42,11 @@ def main():
     
     # 'iterative' for local (slow/concurrent) iterative executor; 'dask' for local (parallel) dask executor;
     # 'condor' for dask on condor; 'coffea-casa' for dask on coffea-casa
-    executor = 'condor' 
+    executor = 'dask' 
     load_preexisting  = False    ### True if don't repeat the processing of files and use preexisting JER from output
-    test_run          = False   ### True if run only on one file and five chunks to debug processor
+    test_run          = True   ### True if run only on one file and five chunks to debug processor
 
-    Nfiles = -1                 ### number of files for each sample; -1 for all files
+    Nfiles = 400                 ### number of files for each sample; -1 for all files
     
     tag_Lx = '_L5'                 ### L5 or L23, but L23 not supported since ages.
     processor_name = 'CoffeaJERCProcessor'+tag_Lx
@@ -97,11 +61,11 @@ def main():
     ### Or manually by defining `dataset` (below) with the path to the .txt file with the file names (without the redirectors).
     ### Or manually by defining `fileslist` as the list with file names.
     ### data_tag will be used to name output figures and histograms.
-    data_tag = 'Pythia-semilep-TTBAR' # QCD-Py Pythia-TTBAR 'QCD-MG-Her' #'Herwig-TTBAR' 
+    data_tag = 'QCD-Py' # QCD-Py Pythia-TTBAR 'QCD-MG-Her' #'Herwig-TTBAR' 
     # data_tag = 'not_scaled_pion'
     ### name of the specific run if parameters changed used for saving figures and output histograms.
-    add_tag = '' # _iso_dr_0p8 '_3rd_jet' # _cutpromtreco _Aut18binning   
-    run_comment = 'Reruning all with the cut on the leading generated jets/ not on the reco jets'
+    add_tag = '_genwt' # _iso_dr_0p8 '_3rd_jet' # _cutpromtreco _Aut18binning   
+    run_comment = 'For the jet spectra, testing if storing the total number of gen weights solves the diagreement'
     # run_comment = 'Testing the leading generated jets cut'
     # run_comment = 'Testing running the sample with scaled pions.'                          
     #### Comment for the log file: e.g., why the run is made?
@@ -247,7 +211,7 @@ def main():
                 },
             )
             cluster.adapt(minimum=2, maximum=400)
-            cluster.scale(10)
+            cluster.scale(5 if 'TTBAR' in data_tag else 10)
             client = Client(cluster)
         
         client.upload_file(processor_name+'.py')
@@ -264,7 +228,7 @@ def main():
     # ### Run the processor
     
     tstart = time.time()
-    chunksize = 1000 ### should be lowered to ~2000 for ttbar to avoid out-of-memory issues, the rest can go with 10000, or maybe more. Can be finetuned more. 
+    chunksize = 2000 if 'TTBAR' in data_tag else 10000 ### should be lowered to ~2000 for ttbar to avoid out-of-memory issues, the rest can go with 10000, or maybe more. Can be finetuned more. 
     # maxchunks = 50
     
     if not load_preexisting:

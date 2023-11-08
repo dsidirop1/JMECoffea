@@ -14,7 +14,7 @@ processor_config = {
         "apply":True,
         "alphaQCD": 1.0,
         "alphaDY":  1.0,
-        "NjetsQCD": 3,
+        "NjetsQCD": 3, #-1 for all jets
         "NjetsDY":  2,
     },
     "select_Nth_jet":{
@@ -32,7 +32,7 @@ processor_config = {
     ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
     ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
     "jetflavour":'partonFlavour',
-    "use_gen_weights": False,
+    "use_gen_weights": True,
     "use_pu_weights": True,
     # ... Add more cuts and parameters as needed
 }

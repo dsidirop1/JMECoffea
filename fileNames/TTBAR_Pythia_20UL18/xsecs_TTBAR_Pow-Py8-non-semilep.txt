@@ -1,0 +1,2 @@
+TTToHad20UL18_JMENano.txt TTbarFullHad 0.454
+TTToDilep20UL18_JMENano.txt TTbarDilep 0.105
