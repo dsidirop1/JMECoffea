@@ -175,6 +175,7 @@ def save_data(data, name, flavor, tag, ptbins_centres, etabins, path='out_txt'):
 
     df = pd.DataFrame(data=data_dict)
     df = df.set_index('etaBins')
+    print('Saving data under: '+path+'/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
     df.to_csv(path+'/EtaBinsvsPtBins'+name+'_'+flavor+tag+'.csv')
 
 def read_data(name, flavor, tag, path='out_txt'):
@@ -213,14 +214,26 @@ def find_ttbar_xsec(key):
     return xsec
 
 
-def get_median(histo, Neff):
+def get_median(histo, Neff, x_range=None):
     ''' Calculate median and median error (assuming Gaussian distribution).
     This is the binned median, not the real data median
     Extrapolation withing bins is performed.
     '''
+    
     xvals = histo.axes[0].centers
+    if x_range == None:
+        xmi, xma = np.searchsorted(xvals, [min(xvals), max(xvals)]) + [0,1]
+    elif len(x_range)!=2:
+        raise ValueError("x_range should be a list [xmin; xmax] in which to evaluate the median")
+    else:
+        xmi, xma = np.searchsorted(xvals, x_range) + [0,1]
     bin_edges = histo.axes[0].edges
     yvals = histo.values()
+
+    xvals = xvals[xmi:xma]
+    yvals = yvals[xmi:xma]
+    bin_edges = bin_edges[xmi:xma+1]
+
     yvals_cumsum = np.cumsum(yvals)
     N = np.sum(yvals)
 
@@ -249,7 +262,7 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
     Perform the second and further fits around the mean+/-<sigma_fit_window>*std of the previous fit.
 
     '''
-    if_failed = False   #save if the fit failed or converged
+    status = 1   #save if the fit failed or converged
     
     xvals = histo.axes[0].centers
     yvals = histo.values()
@@ -268,18 +281,17 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
         chi2 = np.nan
         cov = np.array([[np.nan]*3]*3)
         Ndof = 0
-        if_failed = True
+        status = -1
         xfit_l, xfit_h = [0, len(xvals)-1]
     else:
         try:
             p, cov = curve_fit(gauss, xvals, yvals, p0=[10,1,1])
 #             print("p vals 0 = ", p)
-            ######## Second Gaussian ########
+            ######## Second or further Gaussians ########
             for i in range(Nfit-1):
                 xfit_l, xfit_h = np.searchsorted(xvals,
                                                  [p[1]-np.abs(p[2])*sigma_fit_window,
-                                                  p[1]+np.abs(p[2])*sigma_fit_window])
-                
+                                                  p[1]+np.abs(p[2])*sigma_fit_window], side='left') - [0,1]
                 # if there are only 3pnts, the uncertainty is infty
                 # (or if too small, then the fit doesn't become good),
                 # so increase the range
@@ -305,10 +317,10 @@ def fit_response(histo, Neff, Nfit=3, sigma_fit_window=1.5):
             chi2 = np.nan
             cov = np.array([[np.nan]*3]*3)
             Ndof = 0
-            if_failed = True
+            status = 0
             xfit_l, xfit_h = [0, len(xvals)-1]
             
-    return [p, cov, chi2, Ndof, if_failed, [xfit_l, xfit_h]]
+    return [p, cov, chi2, Ndof, status, [xfit_l, xfit_h]]
 
 
 barable_flavors = ['b', 'c', 's', 'u', 'd', 'ud', 'q']
@@ -362,15 +374,26 @@ def gauss(x, *p):
     A, mu, sigma = p
     return A*np.exp(-(x-mu)**2/(2.*sigma**2))
 
+import os
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
 def get_xsecs_filelist_from_file(file_path, data_tag, test_run=False):
-    with open(file_path) as f:
+    with open(script_dir+'/'+file_path) as f:
         lines = f.readlines()
     lines_split = [line.split() for line in lines]
     if test_run:
-        lines_split = lines_split[:3]  
+        lines_split = lines_split #[:3]  
     xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
     file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
     return xsec_dict, file_dict
+
+from fileNames.available_datasets import legend_labels
+def legend_str_to_filename(legend_str):
+    ''' Removes the latex and other formatting from the legend string and replaces it with a filename friendly string.
+    '''
+    string = (legend_str.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
+                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('\n', '').replace('$', '').replace('\\', ''))
+    return string
 
 
 def get_xsec_dict(data_tag, dataset_dictionary):
@@ -379,7 +402,7 @@ def get_xsec_dict(data_tag, dataset_dictionary):
     ### if the 'data_tag' in the root contains any of the tags in `dataset_dictionary`, select this tag,
     ### e.g.,'QCD-Py_weights' contains 'QCD-Py', so select xsec from 'QCD-Py'.
     keys = np.array(list(dataset_dictionary.keys()))
-    matching_keys =  keys[np.where([ key in data_tag for key in keys])[0]]
+    matching_keys =  keys[np.where([ key in data_tag[:len(key)] for key in keys])[0]]
     if len(matching_keys)>1:
         raise ValueError(f"More than one key from the dataset dictionary matches the given data_tag = {data_tag}")
     elif len(matching_keys)==1:
@@ -388,10 +411,11 @@ def get_xsec_dict(data_tag, dataset_dictionary):
         if (dataset is None) and (xsec is not None):
             xsec_dict, file_dict = get_xsecs_filelist_from_file(xsec, matching_key)
         else:
-            xsec_dict = {matching_key: 1}
+            xsec_dict = {matching_key: xsec}
         legend_label = label
     else:
-        xsec_dict = {data_tag: 1}
+        dataset, xsec, label = dataset_dictionary[matching_key]
+        xsec_dict = {data_tag: xsec}
         legend_label = data_tag
         
     return xsec_dict, legend_label

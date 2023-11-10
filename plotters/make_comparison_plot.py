@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.interpolate import CubicSpline
-from coffea import util
 from cycler import cycler
 import os
 import mplhep as hep
@@ -25,6 +24,7 @@ def make_comparison_plot(data_dict,
     For the legends and figure name the flavor `flav` and eta bin values with the index `etaidx` are used.
     '''
    
+    ########### Retreive the data from the dictionary and some logic with it ############
     keys = [key for key in data_dict.keys()]
     start = ptbins.get_bin_idx(20) if plotvspt else 0 #np.searchsorted(ptbins, 20, side='left')
     end = ptbins.nbins if plotvspt else etabins.nbins
@@ -35,20 +35,48 @@ def make_comparison_plot(data_dict,
     stds  = np.array([key[1][data_range] for key in data_dict.values()])
     reco_pts  = np.array([key[2][data_range] if len(key[2].shape)==2 else key[2][data_range] for key in data_dict.values()])
 
-#     if not plotvspt:
-#         yvals = yvals.T
-#         stds = stds.T
-#         reco_pts = reco_pts.T
-
     ### Replacing response values to corrections
     use_recopt=inverse
     if not plotvspt:
         use_recopt=False
         
+    yvals[(yvals==0) | (np.abs(yvals)==np.inf)] = np.nan
     bins = etabins if plotvspt else ptbins
 
-    # yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
-    yvals[(yvals==0) | (np.abs(yvals)==np.inf)] = np.nan
+    if plotvspt:
+        xvals = reco_pts if use_recopt else np.array([ptbins.centres[start:end]]*len(yvals))
+    else:
+        xvals = np.array([etabins.centres[start:end]]*len(yvals))
+    validx = (xvals>0)*(yvals>0)
+    
+    linspacefun = np.geomspace if plotvspt else np.linspace
+    if np.sum(validx) != 0:
+        xvals_cont = linspacefun(np.min(xvals[validx]), np.max(xvals[validx]), 100)
+    else:
+        xvals_cont = linspacefun(np.min(xvals), np.max(xvals), 100)
+                                    # for name in function_dict.keys()}
+    ### values for splines can only be in a valid range while for corrections evaluators they can go out of range
+    ### so one needs to define two xvals
+    validx_all = np.logical_not(np.any(np.logical_not(validx), axis=0))
+    if np.sum(validx_all) == 0:
+        validx_all = np.ones(validx_all.shape)==1
+    xspline = linspacefun(np.min(xvals[0,validx_all]),  np.max(xvals[0,validx_all]), 100)
+    xlog10_spline = np.log10(xspline)
+
+    bins2 = ptbins if plotvspt else etabins
+    wd = np.abs(np.diff(bins2.edges))[start:end] #bin_widths
+
+    if inverse==True:
+        yvals = 1/yvals
+        ### Error propagation
+        stds = yvals**2*stds
+
+    if plotvspt:
+        eta_str = r'{:0.2f}$<|\eta|<${:0.2f}'.format(etabins.edges[binidx], etabins.edges[binidx+1])
+    else:
+        eta_str = 'to be implemented'
+
+    ########### End of retreive the data from the dictionary and some logic with it ############
 
     fig = plt.figure()
     gs = fig.add_gridspec(nrows=2, ncols=1, hspace=0, height_ratios=[3, 1])
@@ -66,53 +94,14 @@ def make_comparison_plot(data_dict,
         else:
             rc_bykey[key] = rc_bykey[key]+[rc_bykey[key][-1]]
     new_cycler = cycler(**rc_bykey)
+
+    ############################ Start of the top plot ############################
     ax.set_prop_cycle(new_cycler)
-    
-    for axis in [ax.xaxis, ax.yaxis, ax2.xaxis, ax2.yaxis]:
-        axis.set_minor_locator(mpl.ticker.AutoMinorLocator())
-
-    if plotvspt:
-        xvals = reco_pts if use_recopt else np.array([ptbins.centres[start:end]]*len(yvals))
-    else:
-        xvals = np.array([etabins.centres[start:end]]*len(yvals))
-    validx = (xvals>0)*(yvals>0)
-    # xvals_cont = {name: np.geomspace(np.min(xv[valx]), np.max(xv[valx]), 100)
-    #               for xv, valx, name in zip(xvals, validx, function_dict.keys())}
-    
-    linspacefun = np.geomspace if plotvspt else np.linspace
-    if np.sum(validx) != 0:
-        xvals_cont = linspacefun(np.min(xvals[validx]), np.max(xvals[validx]), 100)
-    else:
-        xvals_cont = linspacefun(np.min(xvals), np.max(xvals), 100)
-                                    # for name in function_dict.keys()}
-    ### values for splines can only be in a valid range while for corrections evaluators they can go out of range
-    ### so one needs to define two xvals
-    validx_all = np.logical_not(np.any(np.logical_not(validx), axis=0))
-    if np.sum(validx_all) == 0:
-        validx_all = np.ones(validx_all.shape)==1
-    xspline = linspacefun(np.min(xvals[0,validx_all]),  np.max(xvals[0,validx_all]), 100)
-    xlog10_spline = np.log10(xspline)
-
-    if plotvspt:
-        wd = np.abs(ptbins.edges[start+1:end+1] - ptbins.edges[start:end]) #bin_widths
-    else:
-        wd = np.abs(etabins.edges[start+1:end+1] - etabins.edges[start:end]) #bin_widths
-
-    if inverse==True:
-        yvals = 1/yvals
-        ### Error propagation
-        stds = yvals**2*stds
-
-    if plotvspt:
-        eta_str = r'{:0.2f}$<|\eta|<${:0.2f}'.format(etabins.edges[binidx], etabins.edges[binidx+1])
-    else:
-        eta_str = 'to be implemented'
     p1 = ax.errorbar(xvals[0], yvals[0], yerr=stds[0], #marker='o',
                      capsize=1.6, capthick=0.7, linewidth=1.0,
     #                      markerfacecolor='none', markeredgewidth=1,
                      linestyle="none", label=keys[0]) #+', '+eta_str)
 
-    # markers = ['v','^','d', 'p']
     for xval, yval, name, std in zip(xvals[1:], yvals[1:], keys[1:], stds[1:]):
         ax.errorbar(xval, yval, yerr=std, #marker=marker,
                     capsize=1.6, capthick=0.7, linewidth=1.0,
@@ -121,7 +110,6 @@ def make_comparison_plot(data_dict,
     if reset_colors:
         ax.set_prop_cycle(new_cycler)
 
-#     assert False
     yvals_cont = {}
     yvals_spline = {}
     for name in function_dict.keys():
@@ -154,8 +142,7 @@ def make_comparison_plot(data_dict,
             ax.vlines(HCal_border,0, 2, linestyles='--',color="gray",
                 linewidth=1,)
 
-    # assert False
-
+    ############################ End of the top plot ############################
     ############################ Data ratio plot ######################################
     
     ax2.hlines(1,-10, 10000, linestyles='--',color="black", 
@@ -164,12 +151,6 @@ def make_comparison_plot(data_dict,
         for HCal_border in JERC_Constants.etaBinsEdges_Win14():
             ax2.vlines(HCal_border,0, 2, linestyles='--',color="gray",
                 linewidth=1,)
-
-
-#     else:
-#         ax2.hlines(1,-10, 10, linestyles='--',color="black",
-#             linewidth=1,)
-
     
     data_model_ratio = yvals/yvals[0]
     data_model_ratio_unc = stds / yvals[0]
@@ -217,9 +198,9 @@ def make_comparison_plot(data_dict,
         ax2.plot(xspline, yvals_spline[key]/y_spline, markersize=0)
 
     ax2.set_ylabel(ratio_name)
-    ax2.tick_params(axis="both", which="major", pad=8)
-    ax2.tick_params(direction="in", top=True, right=True, which="both")
-    fig.set_tight_layout(True)
+    # ax2.tick_params(axis="both", which="major", pad=8)
+    # ax2.tick_params(direction="in", top=True, right=True, which="both")
+    # fig.set_tight_layout(True)
 
     ######################## Calculate resonable limits excluding the few points with insane errors ############################
     if np.sum(validx) != 0:
@@ -229,7 +210,7 @@ def make_comparison_plot(data_dict,
         norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         left_lim = np.min((y_norm-yerr_norm)[norm_pos])
         right_lim = np.max((yerr_norm+y_norm)[norm_pos])
-        lim_pad = (right_lim - left_lim)/1.5
+        lim_pad = (right_lim - left_lim)/2.5
         ax.set_ylim(left_lim-lim_pad/10, right_lim+lim_pad)
 
         ### Recalculate the limits for the ratio plot
@@ -238,15 +219,12 @@ def make_comparison_plot(data_dict,
         norm_pos = (yerr_norm<0.4) &  (yerr_norm != np.inf) & (y_norm>-0.1)
         if ~np.any(norm_pos):
             print("Cannot determine ylimits")
-            # norm_pos = np.ones(len(yerr_norm), dtype=int)
         else:
             # raise Exception("Cannot determine ylimits")
             left_lim = np.min((y_norm-yerr_norm)[norm_pos])
             right_lim = np.max((yerr_norm+y_norm)[norm_pos])
             lim_pad = (right_lim - left_lim)/5
             ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
-            # print(f"normal pos = {norm_pos}")
-            # print(f"right lim = {right_lim}")
 
     if not ratio_ylim==None:
         ax2.set_ylim(ratio_ylim)
@@ -263,7 +241,6 @@ def make_comparison_plot(data_dict,
         ax2.set_xscale('log')
 
     xlims = ax.get_xlim()
-    # assert False
     ax.hlines(1,-10, 10000, linestyles='--',color="black",
               linewidth=1,)
 
@@ -280,13 +257,24 @@ def make_comparison_plot(data_dict,
     ax.set_xlim(xlims)
     ax2.set_xlim(xlims)
 
+    ### make the y-axis ticks in the ratio plot look nice: add a decent amount of major and minor ticks
+    ax2.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=5, steps=[1, 2, 5, 10]))
+    ax2.yaxis.set_minor_locator(mpl.ticker.MaxNLocator(nbins=25, steps=[1, 2, 5, 10])) #mpl.ticker.LinearLocator(numticks=25)
+    ### remove the highest tick lavel from the ratio plot as it overlaps with the lowest label from the main plot 
+    tick_labels = ax2.get_yticks() 
+    tick_labels = [f'{tick:.10g}' for tick in tick_labels]  ### remove floating point digits
+    tick_labels = tick_labels[:-1]
+    ax2.set_yticks(ax2.get_yticks()[:-1])
+    ax2.set_yticklabels(tick_labels)
+
+    ############################ Adding the CMS labels and saving the plots ######################################
     eta_string = bins.idx2str(binidx) #'_eta'+str(etabins_abs[etaidx])+'to'+str(etabins_abs[etaidx+1])
 #     eta_string = eta_string.replace('.','')
     fig_corr_name = 'corr' if inverse else 'med_resp'
     fig_x_str = 'pt' if plotvspt else 'eta'
     run_name =  f'{fig_corr_name}_vs_{fig_x_str}_L5_'+'-'.join(keys)+'-'.join(function_dict.keys())
     run_name = (run_name.replace(legend_labels["ttbar"]["lab"], 'ttbar').replace(', ', '-')
-                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '').replace('\n', '')
+                .replace(" ", "_").replace("+", "_").replace('(', '').replace(')', '').replace('/', '').replace('\n', '').replace('$', '').replace('\\', '')
     )
     dir_name1 = f'fig/{fig_corr_name}_vs_{fig_x_str}_comparisons/'
     dir_name2 = dir_name1+run_name
@@ -297,7 +285,8 @@ def make_comparison_plot(data_dict,
         os.mkdir(dir_name2)
         print("Creating directory ", dir_name2)
 
-    hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
+    hep.cms.label("Private work", loc=0, data=False, ax=ax, rlabel='')
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax)
     hep.label.exp_text(text=f'{bins.idx2plot_str(binidx)}\n{flav} jets', loc=2, ax=ax)
     fig_name = dir_name2+'/'+run_name+"_"+flav+'_'+eta_string
     print("Saving plot for eta = ", eta_string)
@@ -307,76 +296,75 @@ def make_comparison_plot(data_dict,
     plt.show()
 
 
-from helpers import read_data as read_data_orig
-def read_data(mean_name, flav, tag1):
-    return read_data_orig(mean_name, flav, tag1, '../')
+# from helpers import read_data as read_data_orig
 
-### Some recent file to get out the binning
-outname = '../out/CoffeaJERCOutputs_L5_DY-MG-Py.coffea'
-output = util.load(outname)
-ptbins = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].edges
-ptbins_c = output[list(output.keys())[0]]['ptresponse_b'].axes['pt_gen'].centers
-etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
+from data_tools import read_or_recreate_data
+out_txt_path = '../out_txt'
+
+def read_data(mean_name, samp, tag1):
+    return read_or_recreate_data(mean_name, samp, tag1, out_txt_path)
+
+# def read_data(mean_name, flav, tag1):
+#     return read_data_orig(mean_name, flav, tag1, '../out_txt/')
+
+# Some recent file to get out the binning
+# outname = '../out/CoffeaJERCOutputs_L5_QCD-Py.coffea'
+# output = util.load(outname)
+# etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
 # etabins = np.array(JERC_Constants.etaBinsEdges_Aut18_full())
-etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
+# etabins = np.array(JERC_Constants.etaBinsEdges_Win14_full())
     
-etabins_abs = etabins[(len(etabins)-1)//2:]
-etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
+# etabins_abs = etabins[(len(etabins)-1)//2:]
+# etabins_c = (etabins_abs[:-1]+etabins_abs[1:])/2 #output['ptresponse'].axis('jeteta').centers()
 
 
-def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
-                            ratio_name='ratio'):
+def make_double_ratio_plot(outputname_num, outputname_denom, etaidx=0,
+                            legend_names = ['Pythia', 'Herwig'],
+                            etabins=JetEtaBins("HCalPart", absolute=True),
+                            ptbins=PtBins("MC_truth"),
+                            flav='',
+                            ratio_name=None,
+                            ratio_type1=True,
+                            ):
     ''' Make a double ratio plot for comparing flavor vs anti-flavor responses
     To do:
     make it work with input parameters of ptbins and etabins, not the ones real at the top
     '''
         
-    median_1 = read_data("Median", flav, outputname1)
-    medianstd_1 = read_data("MedianStd", flav, outputname1)
-    median_2 = read_data("Median", flav+'bar', outputname1)
-    medianstd_2 = read_data("MedianStd", flav+'bar', outputname1)
-    median_3 = read_data("Median", flav, outputname2)
-    medianstd_3 = read_data("MedianStd", flav, outputname2)
-    median_4 = read_data("Median", flav+'bar', outputname2)
-    medianstd_4 = read_data("MedianStd", flav+'bar', outputname2)
+    median_1 = read_data("Median", flav, outputname_denom)
+    medianstd_1 = read_data("MedianStd", flav, outputname_denom)
+    median_2 = read_data("Median", flav+'bar', outputname_denom)
+    medianstd_2 = read_data("MedianStd", flav+'bar', outputname_denom)
+    median_3 = read_data("Median", flav, outputname_num)
+    medianstd_3 = read_data("MedianStd", flav, outputname_num)
+    median_4 = read_data("Median", flav+'bar', outputname_num)
+    medianstd_4 = read_data("MedianStd", flav+'bar', outputname_num)
 
         
     yvals_base = median_1
     std_base = medianstd_1
 
-    yvals_ref = median_2
-    std_ref = medianstd_2
+    yvals_ref = median_2 if ratio_type1 else median_3
+    std_ref = medianstd_2 if ratio_type1 else medianstd_3
 
-    yvals_base2 = median_3
-    std_base2 = medianstd_3
+    yvals_base2 = median_3 if ratio_type1 else median_2
+    std_base2 = medianstd_3 if ratio_type1 else medianstd_2
 
     yvals_ref2 = median_4
     std_ref2 = medianstd_4
 
+    yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
 
-    mean_p_base = yvals_base.copy()
-    mean_p_base[(mean_p_base==0) | (np.abs(mean_p_base)==np.inf)] = np.nan
-
-    # mean_ps = []
-    # for yvar in yvars:
-    #     mean_ps = yvar.copy()
-
-    # yvars[(yvars==0) | (np.abs(yvars)==np.inf)] = np.nan
-
-
-    # fig = plt.figure()
-    # gs = fig.add_gridspec(nrows=1, ncols=1)
-    fig, ax2 = plt.subplots();
-    # ax2 = fig.add_subplot(gs[1])
-    start = np.where(ptbins<=20)[0][-1]
+    fig, ax2 = plt.subplots()
+    start = ptbins.get_bin_idx(20)
+    xvals = ptbins.centres[start:]
 
     for axis in [ax2.xaxis, ax2.yaxis]:
         axis.set_minor_locator(mpl.ticker.AutoMinorLocator())
 
-    xvals = (ptbins[start:-1] + ptbins[start+1:])/2
-    wd = np.abs(ptbins[start:-1] - ptbins[start+1:])
+    wd = np.abs(np.diff(ptbins.edges))[start:]
 
-    yvals_base = mean_p_base[start:,etaidx]
+    yvals_base = yvals_base[start:,etaidx]
     yvals_base[(yvals_base==0) | (np.abs(yvals_base)==np.inf)] = np.nan
     std_base = std_base[start:,etaidx]
 
@@ -393,11 +381,6 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
     yvals_ref2[(yvals_ref2==0) | (np.abs(yvals_ref2)==np.inf)] = np.nan
     std_ref2 = std_ref2[start:,etaidx]
 
-
-    # markers = ['v','^','d', 'p']
-    # for val, name, std, marker in zip(yvars, names, stds, markers):
-    #     ax.errorbar(xvals, val, yerr=std, marker=marker,
-    #                 linestyle="none", label=name)
 
     rel_mc_unc =  std_base/yvals_base 
 
@@ -427,19 +410,19 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
         hatch=10 * "\\",
     )
 
-
     # data in ratio plot
     data_model_ratio = yvals_ref/yvals_base
     data_model_ratio_unc = std_ref / yvals_base
 
-    # for val, std, marker in zip(data_model_ratio, data_model_ratio_unc, markers):
+    lab0 = legend_names[0] if ratio_type1 else '$'+flav+'$'
+    lab1 = legend_names[1] if ratio_type1 else '$\overline{'+flav+'}$'
     ax2.errorbar(
         xvals,
         data_model_ratio, #[nonzero_model_yield],
         yerr=data_model_ratio_unc, #[nonzero_model_yield],
         capsize=1.6, capthick=0.7, linewidth=1.0,
         fmt='o',
-        label = 'Pythia',
+        label = lab0,
     )
 
     # data in ratio plot
@@ -452,15 +435,17 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
         yerr=data_model_ratio_unc2, #[nonzero_model_yield],
         capsize=1.6, capthick=0.7, linewidth=1.0,
         fmt='^',
-        label = 'Herwig',
+        label = lab1,
     #     colour='blue'
     )
 
+    if ratio_name is None:
+        ratio_name='Jet response ratio, $\overline{'+flav+'}/'+flav+'$' if ratio_type1 else f'Jet response ratio, {legend_names[0]}/{legend_names[1]}'
     ax2.set_ylabel(ratio_name)
     ax2.tick_params(axis="both", which="major", pad=8)
     ax2.tick_params(direction="in", top=True, right=True, which="both")
 
-    fig.set_tight_layout(True)
+    # fig.set_tight_layout(True)
 
 
 
@@ -469,23 +454,39 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
     # y_norm = np.concatenate([vals_base, vals_base2])
     # norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)
     # ax.set_ylim(np.min((y_norm-yerr_norm)[norm_pos]), np.max((yerr_norm+y_norm)[norm_pos]))
-
-    yerr_norm = np.concatenate([rel_mc_unc, rel_mc_unc2, data_model_ratio_unc, data_model_ratio_unc2 ])
-    y_norm = np.concatenate([yvals_base/yvals_base, yvals_base2/yvals_base2, data_model_ratio, data_model_ratio2])
-    norm_pos = (yerr_norm<0.003) &  (yerr_norm != np.inf) & (y_norm>-0.1)  
     #     if flav == '_b' and k==3:
     #         1/0
+
+        ######################## Calculate resonable limits excluding the few points with insane errors ############################
+    validx = (xvals>0)*(yvals_base/yvals_base>0)
+    if np.sum(validx) != 0:
+        yerr_norm = np.concatenate([rel_mc_unc, rel_mc_unc2, data_model_ratio_unc, data_model_ratio_unc2 ])
+        y_norm = np.concatenate([yvals_base/yvals_base, yvals_base2/yvals_base2, data_model_ratio, data_model_ratio2])
+        norm_pos = (yerr_norm<0.04) &  (yerr_norm != np.inf) & (y_norm>-0.1)  
+        # left_lim = np.min((y_norm-yerr_norm)[norm_pos])
+        # right_lim = np.max((yerr_norm+y_norm)[norm_pos])
+        # lim_pad = (right_lim - left_lim)/2.5
+        # ax2.set_ylim(left_lim-lim_pad/10, right_lim+lim_pad)
+
+        if ~np.any(norm_pos):
+            print("Cannot determine ylimits")
+            norm_pos = np.ones(len(yerr_norm), dtype=int)
+        else:
+            # raise Exception("Cannot determine ylimits")
+            left_lim = np.min((y_norm-yerr_norm)[norm_pos])
+            right_lim = np.max((yerr_norm+y_norm)[norm_pos])
+            lim_pad = (right_lim - left_lim)/5
+            ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
+            # print(f"normal pos = {norm_pos}")
+            # print(f"right lim = {right_lim}")
+
     left_lim = np.min((y_norm-yerr_norm)[norm_pos])
     right_lim = np.max((yerr_norm+y_norm)[norm_pos])
     lim_pad = (right_lim - left_lim)/10
-    ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad)
+    ax2.set_ylim(left_lim-lim_pad, right_lim+lim_pad*2.5)
 
     ax2.set_xlabel(r'$p_T$ (GeV)');
-    # ax.set_ylabel(r'median response');
-    # ax.set_xscale('log')
     ax2.set_xscale('log')
-
-    # ax.set_xticks([])
 
     good_xlims = ax2.get_xlim()
 
@@ -497,13 +498,24 @@ def make_double_ratio_plot(outputname1, outputname2, etaidx=0, flav='',
 
     leg1 = ax2.legend()
 
-
-    eta_string = '_eta'+str(etabins_abs[etaidx])+'to'+str(etabins_abs[etaidx+1])
-    eta_string = eta_string.replace('.','')
-    print("Saving plot for eta = ", eta_string)
-    fig_name = 'fig/corr_vs_pt'+flav+eta_string+'_L5_double_ratio'+'-median'
-    fig_name = fig_name.replace('$t\overline{\, t}$', 'ttbar').replace(', ', '-').replace('(', '').replace(')', '')
-    print("Saving plot with the name = ", fig_name)
+    eta_string = etabins.idx2str(etaidx) #r'{:0.2f}$<|\eta|<${:0.2f}'.format(etabins.edges[etaidx], etabins.edges[etaidx+1])
+    hep.cms.label("Private work", loc=0, data=False, ax=ax2, rlabel='')
+    # hep.cms.label("Preliminary", loc=0, data=False, ax=ax2)
+    
+    dir_name1 = f'fig/double_ratios'
+    dir_name2 = (dir_name1+'/double_ratio_'+'_'.join(legend_names)+'/').replace(', ', '-').replace('(', '').replace(')', '').replace(' ','_')
+    if not os.path.exists(dir_name1):
+        os.mkdir(dir_name1)
+        print("Creating directory ", dir_name1)
+    if not os.path.exists(dir_name2):
+        os.mkdir(dir_name2)
+        print("Creating directory ", dir_name2)
+    hep.label.exp_text(text=f'{etabins.idx2plot_str(etaidx)}\n{flav} jets', loc=2, ax=ax2)
+    fig_name = dir_name2+'/double_ratio_'+'_'.join(legend_names)+"_"+flav+'_'+eta_string
+    # fig_name = 'fig/corr_vs_pt'+flav+eta_string+'_L5_double_ratio'+'-median'
+    fig_name = fig_name.replace('$t\overline{\, t}$', 'ttbar').replace(', ', '-').replace('(', '').replace(')', '').replace(' ','_')
+    # print("Saving plot for eta = ", eta_string)
+    print("Saving plot with the name = ", fig_name+".pdf / .png")
     plt.savefig(fig_name+'.pdf');
     plt.savefig(fig_name+'.png');
     # gs1.tight_layout(fig, rect=[0, 0.1, 0.8, 0.5])

@@ -10,21 +10,29 @@ processor_config = {
         "mingenjetpt": 15,
     },
     "leading_jet_and_alpha_cut":{
+    # Alpha cut not used (alpha=1) since run 2 because the large pileup causes a bias
         "apply":True,
         "alphaQCD": 1.0,
         "alphaDY":  1.0,
-        "NjetsQCD": 3,
+        "NjetsQCD": 3, #-1 for all jets
         "NjetsDY":  2,
     },
     "select_Nth_jet":{
+    # for debugging purposses, select exactly the Nth jet in each event
         "apply":False,
         "N": 2,
     },
-    "jet_iso_cut":{"apply":True},
+    "jet_iso_cut":{"apply":True,
+                   "dr_cut": 0.8,
+    },
+    "reco_jetMCmatching":{"apply":True,
+                          "dR":   0.2,
+    },
     ### Choose the jet flavour. Some samples have missing `partonFlavour`, so one has to redo the flavour matching oneself. Two different option were implemented:
     ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
     ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
     "jetflavour":'partonFlavour',
-    "use_weights": False,
+    "use_gen_weights": True,
+    "use_pu_weights": True,
     # ... Add more cuts and parameters as needed
 }
