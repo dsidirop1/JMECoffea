@@ -4,6 +4,7 @@ processor_config = {
     # cut: {cut_parameters}
     "good_lepton_cut":      {"apply":True},
     "tight_lepton_veto_id": {"apply":True},
+    "gen_vtx_dz_cut": {"apply": False},
     "recolep_drcut": {"apply":True},
     "jet_pt_cut": {
         "apply":True,
@@ -30,9 +31,10 @@ processor_config = {
     },
     ### Choose the jet flavour. Some samples have missing `partonFlavour`, so one has to redo the flavour matching oneself. Two different option were implemented:
     ### `LHE_flavour` starts from the jet and matches to the closest LHE particle.
-    ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet 
+    ### `LHE_flavour2` (a better option) starts from the LHE particle and matches to the jet. Was slower than LHE_flavor before a numba compiled implementation for ak.count was made. 
     "jetflavour":'partonFlavour',
-    "use_gen_weights": True,
+    "use_gen_weights": False,
     "use_pu_weights": True,
+    "split_ISR_FSR_gluons": False,  # based on if parton flavor overlaps with LHE flavor for some samples it can be possible to split FSR and ISR
     # ... Add more cuts and parameters as needed
 }

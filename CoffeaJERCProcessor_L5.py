@@ -5,19 +5,19 @@ output: a dictionary over datasets of dictionaries over histograms.
 output histograms: ptresponse histogram, pt_reco histogram for each flavor and the cutflow
 ''' 
 
-# from memory_profiler import profile
+from memory_profiler import profile
 from common_binning import JERC_Constants
-from JERCProcessorcuts import jet_iso_cut, leading_jet_and_alpha_cut, jet_pt_cut, good_lepton_cut, select_leptons, recolep_drcut, select_Nth_jet, jetMCmatching, remove_apply
+import JERCProcessorcuts as cuts
 
 # workaround to get a locally installed coffea and awkwrd version using lch on lxplus
 # comment out or replace the path if I happened to forget to remove these lines before pushing:
-# import sys
-# import os
-# coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
-# if not os.path.exists(coffea_path):
-#     raise ValueError(f"The path to the coffea installation does not exist. Please supply the correct path or comment out this line if using the environment path. The provided path is: {coffea_path}.")
-# if coffea_path not in sys.path:
-#     sys.path.insert(0,coffea_path)
+import sys
+import os
+coffea_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/coffea/'
+if not os.path.exists(coffea_path):
+    raise ValueError(f"The path to the coffea installation does not exist. Please supply the correct path or comment out this line if using the environment path. The provided path is: {coffea_path}.")
+if coffea_path not in sys.path:
+    sys.path.insert(0,coffea_path)
 # 
 # ak_path = '/afs/cern.ch/user/a/anpotreb/top/JERC/local-packages/'
 # if ak_path not in sys.path:
@@ -34,7 +34,7 @@ from coffea.jetmet_tools import JECStack, CorrectedJetsFactory
 from coffea.lookup_tools import extractor
 import correctionlib
 
-from LHE_flavour import get_LHE_flavour, get_LHE_flavour_2
+from LHE_flavour import get_LHE_flavour, get_LHE_flavour2
 import hist
 import awkward as ak
 
@@ -45,10 +45,12 @@ import awkward as ak
 ptbins = np.array(JERC_Constants.ptBinsEdgesMCTruth())
 etabins = np.array(JERC_Constants.etaBinsEdges_CaloTowers_full())
 
+
 class Processor(processor.ProcessorABC):
     def __init__(self, processor_config):   
         self.cfg = processor_config
         self.jetflavour = processor_config["jetflavour"]
+        self.split_ISR_FSR_gluons = processor_config["split_ISR_FSR_gluons"]
 
         ext = extractor()
         ext.add_weight_sets([
@@ -69,18 +71,18 @@ class Processor(processor.ProcessorABC):
         jec_inputs = {name: evaluator[name] for name in jec_stack_names}
         jec_stack = JECStack(jec_inputs)
 
-        self.name_map = jec_stack.blank_name_map
-        self.name_map['JetPt'] = 'pt'
-        self.name_map['JetMass'] = 'mass'
-        self.name_map['JetEta'] = 'eta'
-        self.name_map['JetA'] = 'area'
-        self.name_map['ptGenJet'] = 'pt_gen'
-        self.name_map['ptRaw'] = 'pt_raw'
-        self.name_map['massRaw'] = 'mass_raw'
-        self.name_map['Rho'] = 'rho'
+        name_map = jec_stack.blank_name_map
+        name_map['JetPt'] = 'pt'
+        name_map['JetMass'] = 'mass'
+        name_map['JetEta'] = 'eta'
+        name_map['JetA'] = 'area'
+        name_map['ptGenJet'] = 'pt_gen'
+        name_map['ptRaw'] = 'pt_raw'
+        name_map['massRaw'] = 'mass_raw'
+        name_map['Rho'] = 'rho'
         
         
-        self.jet_factory = CorrectedJetsFactory(self.name_map, jec_stack)
+        self.jet_factory = CorrectedJetsFactory(name_map, jec_stack)
         self.flavor2partonNr = {'b':5,
                            'c':4,
                            's':3,
@@ -92,8 +94,14 @@ class Processor(processor.ProcessorABC):
                            'ubar':-2,
                            'dbar':-1,
                            'g':21,
+                        #    'FSR_gluon':21,
+                        #    'ISR_gluon':21, ## will be split into FSR/ME gluons and ISR later
                            'unmatched':0,
                            }
+        if self.split_ISR_FSR_gluons:
+            self.flavor2partonNr['FSR_gluon'] = 21
+            self.flavor2partonNr['ISR_gluon'] = 21
+            self.flavor2partonNr.pop('g')
         
         self.flavors = self.flavor2partonNr.keys() #['b', 'c', 'u', 'd', 's', 'g', 'bbar', 'cbar', 'ubar', 'dbar', 'sbar', 'untagged']
 
@@ -114,12 +122,8 @@ class Processor(processor.ProcessorABC):
     @property
     def accumulator(self):
         return self._accumulator
-
-    # @profile    
-    # def for_memory_testing(self):
-    #     a=1
         
-#     @profile    
+    # @profile    
     def process(self, events):
 
         ############ Define the histograms ############
@@ -129,15 +133,12 @@ class Processor(processor.ProcessorABC):
         ptresponse_axis = hist.axis.Regular( 100, 0, 2.5, overflow=True, underflow=True, name="ptresponse", label="RECO / GEN response")
         jeteta_axis = hist.axis.Variable(etabins, name="jeteta", label=r"Jet $\eta$")
 
-        # self.for_memory_testing()
         output = {'ptresponse_'+samp:hist.Hist(pt_gen_axis, ptresponse_axis, jeteta_axis, storage="weight", name="Counts")
                   for samp in flavors}
-        # self.for_memory_testing()
         # To calculate the mean recopt, store only the sums of values for each bin.
         # Thus it takes much less space than storing the whole reco_pt distribution.  
         for samp in flavors:
             output['reco_pt_sumwx_'+samp] = hist.Hist(pt_gen_axis, jeteta_axis, storage="weight", name="Counts")
-#         self.for_memory_testing()
         
         cutflow_axis = hist.axis.StrCategory([], growth=True, name="cutflow", label="Cutflow Scenarios")
         output['cutflow_events'] = hist.Hist(cutflow_axis, storage="weight", label="N events")
@@ -153,9 +154,12 @@ class Processor(processor.ProcessorABC):
         npvCut = (events.PV.npvsGood > 0)
         pvzCut = (np.abs(events.PV.z) < 24)
         rxyCut = (np.sqrt(events.PV.x*events.PV.x + events.PV.y*events.PV.y) < 2)
-        # dzvtxCut = (np.abs(events.GenVtx.z-events.PV.z)<0.2)
+        eventsCut = npvCut & pvzCut & rxyCut
+        if self.cfg["gen_vtx_dz_cut"]["apply"]==True:
+            gen_vtx_dz_cut = (np.abs(events.GenVtx.z-events.PV.z)<0.2)
+            eventsCut = eventsCut & gen_vtx_dz_cut
         
-        selectedEvents = events[npvCut & pvzCut & rxyCut ] #& dzvtxCut
+        selectedEvents = events[eventsCut] 
         output['cutflow_events'].fill(cutflow='gen vertex cut', weight=len(selectedEvents))
         # get GenJets and Jets
         jets = selectedEvents.Jet
@@ -167,13 +171,15 @@ class Processor(processor.ProcessorABC):
             raise ValueError(f"jet flavour is chosen as {self.jetflavour}, but the sample does not contain 'LHEPart' "+
                                  ", so the jet flavour cannot be recalculated.")
              
-        if self.jetflavour=='LHE_flavour_2':
-                jets = get_LHE_flavour_2(jets, selectedEvents)
+        if self.jetflavour=='LHE_flavour2' or self.split_ISR_FSR_gluons:
+        # if True: ### for testing the ISR/ FSR splitting
+            jets = get_LHE_flavour2(jets, selectedEvents)
 
         ############ Jet selection ###########
         # Require that at least one gen jet is matched
-        jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
-        selected_jets = jets[jet_gen_match_mask]
+        # jet_gen_match_mask = ~ak.is_none(jets.matched_gen,axis=1)
+        selected_jets = jets[~ak.is_none(jets.matched_gen,axis=1)]
+        # del jet_gen_match_mask
         output['cutflow_jets'].fill(cutflow='gen matched', weight=ak.sum(ak.num(selected_jets)))
 
         ############ Apply Jet energy corrections on the jets ###########
@@ -188,11 +194,11 @@ class Processor(processor.ProcessorABC):
 
         reco_jets = self.jet_factory.build(selected_jets, lazy_cache=events_cache)
 
-        leptons, tightelectrons, tightmuons = select_leptons(selectedEvents)
+        leptons, tightelectrons, tightmuons = cuts.select_leptons(selectedEvents)
         # ###### Event selection based on leptons: 2 (0/1/2) reco leptons for DY (TTBAR semilep) ######
         # # cuts on DY and ttbar based on L3Res selections https://twiki.cern.ch/twiki/bin/view/CMS/L3ResZJet
         if self.cfg["good_lepton_cut"]["apply"]==True:
-            selectedEvents, reco_jets, leptons, tightelectrons, tightmuons = good_lepton_cut(reco_jets, selectedEvents, dataset, leptons, tightelectrons, tightmuons)
+            selectedEvents, reco_jets, leptons, tightelectrons, tightmuons = cuts.good_lepton_cut(reco_jets, selectedEvents, dataset, leptons, tightelectrons, tightmuons)
         output['cutflow_events'].fill(cutflow='lepton selection', weight=len(selectedEvents))
 
         # Require tight lepton veto id on jets = no matched (dressed) leptons in the jet;
@@ -202,35 +208,35 @@ class Processor(processor.ProcessorABC):
         output['cutflow_jets'].fill(cutflow='tight lep. id', weight=ak.sum(ak.num(reco_jets)))
 
         if self.cfg["recolep_drcut"]["apply"]==True:
-            reco_jets = recolep_drcut(reco_jets, leptons, leptons)
+            reco_jets = cuts.recolep_drcut(reco_jets, leptons, leptons)
         output['cutflow_jets'].fill(cutflow=r'$\Delta R$'+' cut with leptons', weight=ak.sum(ak.num(reco_jets)))
 
         cut_tmp = self.cfg["jet_pt_cut"]
         if cut_tmp["apply"]==True:
-            reco_jets = jet_pt_cut(reco_jets, cut_tmp["mingenjetpt"])
+            reco_jets = cuts.jet_pt_cut(reco_jets, cut_tmp["mingenjetpt"])
         output['cutflow_jets'].fill(cutflow='jetpt cut', weight=ak.sum(ak.num(reco_jets)))
 
         # redo the jet matching with potentially lower dr cut than matched automatically
         cut_tmp = self.cfg["reco_jetMCmatching"]
         if cut_tmp["apply"]==True:
-            reco_jets = jetMCmatching(reco_jets, **cut_tmp)
+            reco_jets = cuts.jetMCmatching(reco_jets, **cut_tmp)
         output['cutflow_jets'].fill(cutflow='matched gen cut', weight=ak.sum(ak.num(reco_jets)))
         ######### Alpha cut = cut on the additional jet activity  ############    
         # Not used since run 2 because the large pileup causes a bias    
         cut_tmp = self.cfg["leading_jet_and_alpha_cut"]
         if cut_tmp["apply"]==True:
-            reco_jets, selectedEvents = leading_jet_and_alpha_cut(reco_jets, leptons, selectedEvents, dataset, **remove_apply(cut_tmp))
+            reco_jets, selectedEvents = cuts.leading_jet_and_alpha_cut(reco_jets, leptons, selectedEvents, dataset, **cuts.remove_apply(cut_tmp))
 
         cut_tmp = self.cfg["select_Nth_jet"]
         if cut_tmp["apply"]==True:
-            reco_jets, selectedEvents = select_Nth_jet(reco_jets, selectedEvents, cut_tmp["N"])
+            reco_jets, selectedEvents = cuts.select_Nth_jet(reco_jets, selectedEvents, cut_tmp["N"])
         output['cutflow_jets'].fill(cutflow=r'$\alpha$ cut'+'\nleading jets', weight=ak.sum(ak.num(reco_jets)))
         output['cutflow_events'].fill(cutflow=r'$\alpha$ cut',       weight=len(selectedEvents))
 
         # # Cut on overlapping jets
         cut_tmp = self.cfg["jet_iso_cut"]
         if cut_tmp["apply"]==True:
-            reco_jets = jet_iso_cut(reco_jets, **remove_apply(cut_tmp))
+            reco_jets = cuts.jet_iso_cut(reco_jets, **cuts.remove_apply(cut_tmp))
         output['cutflow_jets'].fill(cutflow='iso jets', weight=ak.sum(ak.num(reco_jets)))
         gen_jets = reco_jets.matched_gen
 
@@ -239,6 +245,11 @@ class Processor(processor.ProcessorABC):
             reco_jets = get_LHE_flavour(reco_jets, selectedEvents)      
         
         jet_flavour = reco_jets[self.jetflavour] 
+        # print(f"len jet_flavour = {len(jet_flavour)}")
+        # for ii in range(40):
+        #     print("---"*15)
+        #     print(f"LHE flavour    = {jet_flavour[ii]}")
+        #     print(f"parton flavour = {reco_jets['partonFlavour'][ii]}")
 
         ########### Split the samples into jet flavours ###############
         shapes_jets = ak.num(gen_jets.pt) #for event weights
@@ -274,7 +285,14 @@ class Processor(processor.ProcessorABC):
                  for flav in flavors if 'unmatched' not in flav}
         from functools import reduce
         ## find the jets that are not taggeed as any of the flavours
+        if self.split_ISR_FSR_gluons:
+            masks['FSR_gluon'] = ak.flatten((reco_jets["partonFlavour"] == 21) & (reco_jets["LHE_flavour2"] != 21)).to_numpy( allow_missing=True)
+            masks['ISR_gluon'] = ak.flatten((reco_jets["partonFlavour"] == 21) & (reco_jets["LHE_flavour2"] == 21)).to_numpy( allow_missing=True)
         masks['unmatched'] = reduce(lambda x, y: x+y, masks.values()) == 0
+        # len(f"len unmatched = {len(masks['unmatched'])}")
+        # print(f"len unmatched = {len(masks['unmatched'])}")
+        # print(f"len jets = { np.sum([np.sum(masks[flav]) for flav in flavors])}")
+        # print(f"len jets = { len(jetpt)}")
         # for flav in flavors:
         #      print(f"sum masks for flav {flav} = {np.sum(masks[flav])}.")
         #      print(f"sum masks2 for flav {flav} = {np.sum(masks2[flav])}.")
@@ -315,7 +333,6 @@ class Processor(processor.ProcessorABC):
                                                  jeteta=gen_jetetas[flav],
                                                  weight=jetpts[flav]*weights_jet[flav]
                                                 )
-        # self.for_memory_testing()
         output['sum_weights'].fill(cutflow='sum_weights', weight=ak.sum(gen_weights))
         # allflav = [key for key in output.keys() if 'ptresponse' in key]
         # print(f"len iso jets  =  { sum([output[key].sum().value for key in allflav]) }.")

@@ -1,3 +1,10 @@
+"""
+A lot of helper functions that are used in the package.
+To do: could be split into a reasonable hierarchy. 
+
+Author(s): Andris Potrebko (RTU)
+"""
+
 import pandas as pd
 import numpy as np
 
@@ -101,7 +108,10 @@ def dictionary_pattern(dictionary, pattern):
     return {key:dictionary[key] for key in dictionary.keys() if pattern in key}
 
 def check_hist_values(hist1, hist2):
-    if not (hist1.keys()==hist2.keys()):
+    l1 = list(hist1.keys())
+    l2 = list(hist2.keys())
+    if not (set(l1+l2) == set(l1) == set(l2)):
+    # if not (hist1.keys()==hist2.keys()):
         raise ValueError(f"Keys of the two histograms are not the same. The keys are {hist1.keys()} and {hist2.keys()}")
 
 def hist_add(hist1, hist2):
@@ -330,6 +340,7 @@ composite_flavor_dict = {
     'ud': ['u', 'd'],
     'qbar': ['ubar', 'dbar', 'sbar'],
     'udbar': ['ubar', 'dbar'],
+    # 'g': ['ISR_gluon', 'FSR_gluon'],
 }
 
 def get_flavor_antiflavor_list(flavors):
@@ -363,6 +374,8 @@ def add_flavors(output, flavor='all', combine_antiflavour=True ):
             combine_samples_bar = [flavor+'bar' for flavor in combine_samples if flavor in barable_flavors]
             combine_samples = combine_samples_bar + combine_samples
 
+    # if flavor == 'g':
+    #     breakpoint()
     all_responses = {flavor:output['ptresponse_'+flavor] for flavor in combine_samples}
     response_hist = sum(all_responses.values())
     all_reco_pts = {flavor:output['reco_pt_sumwx_'+flavor] for flavor in combine_samples}
@@ -377,12 +390,12 @@ def gauss(x, *p):
 import os
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
-def get_xsecs_filelist_from_file(file_path, data_tag, test_run=False):
+def get_xsecs_filelist_from_file(file_path, data_tag):
     with open(script_dir+'/'+file_path) as f:
         lines = f.readlines()
     lines_split = [line.split() for line in lines]
-    if test_run:
-        lines_split = lines_split #[:3]  
+    # if test_run:
+        # lines_split = lines_split #[:3]  
     xsec_dict = {data_tag+'_'+lineii[1]: xsecstr2float(lineii[2]) for lineii in lines_split }
     file_dict = {data_tag+'_'+lineii[1]: lineii[0] for lineii in lines_split }
     return xsec_dict, file_dict
@@ -434,3 +447,93 @@ def find_result_file_index(ResultFile):
         RunIndex = 1
         
     return RunIndex
+
+import urllib.request, json, subprocess
+
+def get_site_statuses():
+    ''' Import the table from the site readiness webpage and return a the site statuses from the last of the days in the table.
+    Output: pandas dataframe with the site alias as index and the last entry in the table
+    '''
+    site_status_url = 'https://cmssst.web.cern.ch/sitereadiness/sum_report.html'
+    tab = pd.read_html(site_status_url)
+    vals = tab[0][0].values
+    arestr = [type(val)==str for val in vals]
+    tab_str = tab[0][arestr]
+    vals = tab_str[0].values
+    # vals = vals[arestr]
+    areT2 = ['T2' in val for val in vals]
+    tabT2 = tab_str[areT2]
+    tabT2 = tabT2.set_index(0)
+    tabT2 = tabT2.iloc[:,-2] #-3 if for the new day there is no result yet
+    return tabT2
+
+def append_endpoint_redi(filenames, out_name='fileNames/TTBAR_Pythia_20UL18/fileNames_TTToSemi20UL18_JMENano_redi.txt', blacklist_sites=[]):
+    '''
+    Get the endpoint of the site where the file is located and append it to the filename
+    to bypass xrootd redirector which often crashes with uproot.
+    '''
+    ednpoit_json_url = 'https://cmssst.web.cern.ch/cmssst/site_info/site_endpoints.json'
+    with urllib.request.urlopen(ednpoit_json_url) as url:
+        endpoint_table = json.load(url)
+
+    site_statuses = get_site_statuses()
+
+    print("Looking for the exact enpoints for the files in the dataset. This might take time (need to source das many times).")
+    filenames_redi = []
+    das_fail = 0
+    json_fail = 0
+    no_T2 = 0
+    all_T2_down = 0
+    nfiles = len(filenames)
+    for filename in filenames:
+        # print(f"File: {filename}")
+            # Find the site alias using dasgoclient
+        dasgoclient_query = f"site file={filename}"
+        dasgoclient_result = subprocess.run(["dasgoclient", "-query", dasgoclient_query], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        if dasgoclient_result.returncode == 0:
+            site_aliases = [line for line in dasgoclient_result.stdout.splitlines() if "T2" in line]
+
+            if len(site_aliases)==0:
+                no_T2+=1
+                # print("Site Alias not found in dasgoclient output.")
+
+            all_sites_down = True
+            for site_alias in site_aliases:
+                # site_alias = next((line for line in dasgoclient_result.stdout.splitlines() if "T2" in line), None)
+        #         print(f"Site Alias: {site_alias}")
+                # Find the redirector from the JSON data
+                site_status = site_statuses.loc[site_alias]
+                if not("FTS: ok" in site_status) or ("warning" in site_status) or ("error" in site_status) or (site_alias in blacklist_sites):
+                    print(f"Site {site_alias} is down. Status: {site_status}. Will try the next site in {site_aliases}.")
+                    continue
+
+                redirector = next((entry["endpoint"] for entry in endpoint_table["data"] if entry["site"] == site_alias and entry["type"] == "XROOTD"), None)
+
+                if redirector:
+                    # print(f"Redirector: {redirector}")
+                    filenames_redi.append(f"root://{redirector}/{filename}".replace('////','//'))
+                    all_sites_down = False
+                    break
+                else: #Redirector not found in JSON data.
+                    json_fail+=0
+        else: #error running dasgoclient
+            das_fail+=1
+
+        if all_sites_down:
+            all_T2_down+=1
+        
+        if nfiles>100 and filenames.index(filename)%(nfiles//20)==0:
+            print(f"{filenames.index(filename)}/{nfiles} files processed.")
+        
+    print(f'Found redirectors for {len(filenames_redi)}/{len(filenames)} files.')
+    print(f'Das failed for {das_fail} files.')
+    print(f'Files stored in no Tier2 for {no_T2} files.')
+    print(f'All Tier 2 sites are down {all_T2_down} files.')
+    print(f'The redirectors not on the endpoint webpage for {json_fail} files.')
+    print(f'Wrote to a file {out_name}')
+    with open(out_name, 'w') as f:
+        for filename in filenames_redi:
+            f.write("%s\n" % filename)
+    return filenames_redi
+

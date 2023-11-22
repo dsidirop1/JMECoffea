@@ -3,7 +3,7 @@ import matplotlib as mpl
 import numpy as np
 import mplhep as hep
 import os
-import sys
+# import sys
 # top_path = '../'
 # if top_path not in sys.path:
 #     sys.path.append(top_path)
@@ -28,6 +28,8 @@ def plot_corrections(result, ptbins_c, etabins, tag, flavor, plotetavals=[0, 1.3
     etaidxs = etabins.get_bin_idx(plotetavals)
 #     lastbin = lastbin[-1] if len(lastbin)>0 else -1
     lastbin = -1
+    if lastbin == -1:
+        lastbin = len(ptbins_c)
     
     ptbins_plot = ptbins_c[start:lastbin]
     medianstd = result["MedianStd"][start:lastbin,:]

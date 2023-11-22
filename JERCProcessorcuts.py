@@ -1,7 +1,14 @@
+#!/usr/bin/env python
 # JERCProcessorcuts.py
+"""
+Defines the cuts that can be used in CoffeaJERCProcessor_L5 
+
+Author(s): Andris Potrebko (RTU)
+"""
 
 import awkward as ak
 import numpy as np
+from memory_profiler import profile
 
 ### input numbers
 mZpdg = 91.1876
@@ -17,7 +24,7 @@ def jet_iso_cut(reco_jets, dr_cut=0.8):
     drs, _ = reco_jets.metric_table(reco_jets, return_combinations=True, axis=1)
     jet_iso_mask = ~ ak.any((1e-10<drs) & (drs<dr_cut), axis=2 )
     return reco_jets[jet_iso_mask]
-
+# @profile
 def leading_jet_and_alpha_cut(reco_jets, leptons, events, dataset, alphaQCD, alphaDY, NjetsQCD, NjetsDY):
     '''
     Selects the leading generator jets and performs the alpha cut
@@ -114,12 +121,10 @@ def recolep_drcut(reco_jets, tightelectrons, tightmuons, dR=0.2):
     (tight lepton veto id does not seem to cut all the leptons)
     '''
     drs = reco_jets.metric_table(tightelectrons, return_combinations=False, axis=1 )
-    matched_with_promt_lep = np.any((drs<dR),axis=2)
-    overlappng_reco_lep_mask = np.logical_not(matched_with_promt_lep)
+    overlappng_reco_lep_mask = np.all((drs>dR),axis=2)
 
     drs = reco_jets.metric_table(tightmuons, return_combinations=False, axis=1 )
-    matched_with_promt_lep = np.any((drs<dR),axis=2)
-    overlappng_reco_lep_mask = overlappng_reco_lep_mask*np.logical_not(matched_with_promt_lep)
+    overlappng_reco_lep_mask = overlappng_reco_lep_mask*np.all((drs>dR),axis=2)
     reco_jets = reco_jets[overlappng_reco_lep_mask]
     return reco_jets
 
