@@ -267,7 +267,7 @@ class Processor(processor.ProcessorABC):
 
         if self.cfg["use_pu_weights"]:
             weights = weights*self.pucorr['Collisions18_UltraLegacy_goldenJSON'].evaluate(selectedEvents.Pileup.nTrueInt, "nominal")
-        weights_jet = np.repeat(weights, shapes_jets)
+        weights_jet = np.repeat(weights, shapes_jets).to_numpy()
 
 
         masks = {flav: ak.flatten((jet_flavour == self.flavor2partonNr[flav] )).to_numpy( allow_missing=True)
